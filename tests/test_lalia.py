@@ -1,4 +1,3 @@
-import pprint
 import time
 from importlib.resources import files
 from inspect import cleandoc
@@ -178,10 +177,9 @@ session = Session(
         model=ChatModel.GPT3_5_TURBO_0613,
         temperature=0.0,
         api_key=get_openai_token(),
-        debug=True,
     ),
     system_message=SYSTEM_TEMPLATE.format(schema=schema_din_sql),
-    messages=[
+    init_messages=[
         AssistantMessage(
             content=(
                 "I should first use the sql_db_pre_select_tables "
@@ -190,14 +188,15 @@ session = Session(
         ),
     ],
     functions={sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query},
-    debug=True,
+    verbose=True,
+    autocommit=False,
 )
 
 
 def timeit(func):
     def wrapper(*args, **kwargs):
         start_time = time.perf_counter()
-        result = func(*args, **kwargs)
+        func(*args, **kwargs)
         end_time = time.perf_counter()
         print(f"Time: {(end_time - start_time):.2f} seconds")
 

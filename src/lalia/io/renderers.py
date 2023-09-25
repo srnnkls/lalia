@@ -16,13 +16,16 @@ from lalia.chat import messages
 
 class ConversationRenderer(JupyterMixin):
     max_cell_length = 2000
+    cell_width = 80
 
     def __init__(self, messages: Sequence[messages.Message], title: str | None = None):
         self.messages = messages
         self.title = title
 
     def __rich__(self) -> Table:
-        table = Table(title=self.title, show_header=False, box=box.SIMPLE, width=88)
+        table = Table(
+            title=self.title, show_header=False, box=box.SIMPLE, width=self.cell_width
+        )
         table.add_column("Role", style="dim")
         table.add_column("Message")
 
@@ -54,6 +57,8 @@ class MessageRenderer(JupyterMixin):
 
 
 class MessageBufferRender(JupyterMixin):
+    panel_width = 88
+
     def __init__(
         self, messages: Sequence[messages.Message], pending: Sequence[messages.Message]
     ):
@@ -65,9 +70,11 @@ class MessageBufferRender(JupyterMixin):
         if self.pending:
             pending = ConversationRenderer(self.pending).__rich__()
             return Group(
-                Panel(messages, title="Messages"),
+                Panel(messages, title="Messages", width=self.panel_width),
                 Text("\n"),
-                Panel(pending, title="Pending", box=box.MINIMAL),
+                Panel(
+                    pending, title="Pending", box=box.MINIMAL, width=self.panel_width
+                ),
             )
         else:
-            return Group(Panel(messages, title="Messages"))
+            return Group(Panel(messages, title="Messages", width=self.panel_width))
