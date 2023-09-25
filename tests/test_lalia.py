@@ -149,7 +149,7 @@ def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> 
         return f"Error: Query failed with {e}. Please adjust the query and try again."
 
 
-SYSTEM_MESSAGE = cleandoc(
+SYSTEM_TEMPLATE = cleandoc(
     """
     You are an agent designed to interact with a SQL database. Given an input question,
     create a syntactically correct PostgresSQL query to run, then look at the results of
@@ -180,7 +180,7 @@ session = Session(
         api_key=get_openai_token(),
         debug=True,
     ),
-    system_message=SYSTEM_MESSAGE.format(schema=schema_din_sql),
+    system_message=SYSTEM_TEMPLATE.format(schema=schema_din_sql),
     messages=[
         AssistantMessage(
             content=(
@@ -189,7 +189,7 @@ session = Session(
             )
         ),
     ],
-    functions=[sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query],
+    functions={sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query},
     debug=True,
 )
 

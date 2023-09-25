@@ -5,11 +5,15 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any
 
-from lalia.chat.roles import Role
-from lalia.io.renderers import MessageRenderer
 from pydantic import ConfigDict, validate_arguments
 from pydantic.dataclasses import dataclass
-from ruamel import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
+
+from lalia.chat.roles import Role
+from lalia.io.renderers import MessageRenderer
+
+yaml = YAML(typ="safe")
 
 
 @dataclass
@@ -24,7 +28,7 @@ class FunctionCall:
             except json.JSONDecodeError as e:
                 try:
                     self.arguments = yaml.load(self.arguments)
-                except yaml.YAMLError:
+                except YAMLError:
                     raise e
 
 

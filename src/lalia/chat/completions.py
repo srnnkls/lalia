@@ -5,9 +5,7 @@ from pydantic.dataclasses import dataclass
 
 from lalia.chat.messages import (
     AssistantMessage,
-    BaseMessage,
     FunctionMessage,
-    Message,
     SystemMessage,
 )
 
@@ -22,17 +20,25 @@ class FinishReason(StrEnum):
 
 @dataclass
 class Choice:
+    """
+    Wrraps an LLM response message.
+    """
+
     index: int
-    message: Message
+    message: AssistantMessage
     finish_reason: FinishReason
 
     def __post_init__(self):
         if isinstance(self.message, dict):
-            self.message = BaseMessage(**self.message).parse()
+            self.message = AssistantMessage(**self.message)
 
 
 @dataclass
 class Completion:
+    """
+    Wraps a final message (after processing potential function calls).
+    """
+
     message: AssistantMessage | FunctionMessage | SystemMessage
     finish_reason: FinishReason
 

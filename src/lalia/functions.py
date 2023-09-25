@@ -75,7 +75,7 @@ def execute_function_call(
 ) -> FunctionCallResult:
     validator = validate_arguments(func).model
     try:
-        validator(**arguments)
+        validator.parse_obj(arguments)
     except ValidationError as e:
         return FunctionCallResult(
             name=func.__name__,
@@ -83,6 +83,9 @@ def execute_function_call(
             error=Error(f"Invalid arguments. Please check the function signature: {e}"),
         )
     results = func(**arguments)
+    if isinstance(results, FunctionCallResult):
+        return results
+
     if isinstance(results, str) and results.startswith("Error:"):
         return FunctionCallResult(
             name=func.__name__,

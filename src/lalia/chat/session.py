@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import field, fields
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import field
 from pprint import pprint
 from typing import Any
 
@@ -26,8 +26,10 @@ from lalia.llm.openai import Choice
 class Session:
     llm: LLM
     system_message: str
-    messages: list[Message] = field(default_factory=list)
-    functions: Sequence[Callable] = field(default_factory=list)
+    messages: Sequence[Message] = field(default_factory=list)
+    functions: Sequence[Callable[..., Any]] | Iterable[Callable[..., Any]] = field(
+        default_factory=set
+    )
     memory: int = 100
     max_iterations: int = 10
     debug: bool = False
@@ -79,7 +81,7 @@ class Session:
     def _handle_function_call(self, name: str, arguments: dict[str, Any]) -> Message:
         function_names = [func.__name__ for func in self.functions]
         if name in function_names:
-            func = next(iter(filter(lambda f: f.__name__ == name, self.functions)))
+            func = next(func for func in self.functions if func.__name__ == name)
             results = execute_function_call(func, arguments)
 
             match results.error, results.result:
@@ -100,17 +102,17 @@ class Session:
         )
 
     def complete(self, messages: Sequence[Message] = ()) -> Completion:
-        return next(iter(self.complete_choices(messages, choices=1)))
+        return next(iter(self.complete_choices(messages, n_choices=1)))
 
     def complete_choices(
-        self, messages: Sequence[Message] = (), choices=2
+        self, messages: Sequence[Message] = (), n_choices=2
     ) -> list[Completion]:
         if not messages:
             messages = list(self.messages)
 
         response = self.llm.complete(
             messages=messages,
-            choices=choices,
+            n_choices=n_choices,
             functions=self.functions,
         )
 
