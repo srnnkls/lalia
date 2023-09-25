@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import field
-from pprint import pprint
 from typing import Any
 
+from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
+from rich.console import Console
 
+from lalia.chat import dispatcher
 from lalia.chat.completions import Completion, FinishReason
 from lalia.chat.messages import (
     AssistantMessage,
@@ -21,8 +23,10 @@ from lalia.functions import Error, execute_function_call
 from lalia.llm import LLM
 from lalia.llm.openai import Choice
 
+console = Console()
 
-@dataclass(kw_only=True)
+
+@dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
 class Session:
     llm: LLM
     system_message: SystemMessage | str = field(
@@ -32,14 +36,29 @@ class Session:
     functions: Sequence[Callable[..., Any]] | Iterable[Callable[..., Any]] = field(
         default_factory=set
     )
+    dispatcher: dispatcher.Dispatcher = field(
+        default_factory=dispatcher.FunctionsDispatcher
+    )
     autocommit: bool = True
     memory: int = 100
     max_iterations: int = 10
     verbose: bool = False
     debug: bool = False
 
-    def __call__(self, input: str) -> Message:
-        self.messages.add(UserMessage(content=input))
+    def __post_init__(self):
+        if isinstance(self.system_message, str):
+            self.system_message = SystemMessage(content=self.system_message)
+
+        self.messages = MessageBuffer(
+            [
+                self.system_message,
+                *self.init_messages,
+            ],
+            verbose=self.verbose,
+        )
+
+    def __call__(self, user_input: str = "") -> Message:
+        self.messages.add(UserMessage(content=user_input))
         for _ in range(self.max_iterations):
             assistant_message, finish_reason = self.complete()
             if finish_reason is FinishReason.STOP:
@@ -47,18 +66,6 @@ class Session:
                     self.messages.commit()
                 return assistant_message
         return self._complete_failure()
-
-    def __post_init__(self):
-        if isinstance(self.system_message, str):
-            self._system_message = SystemMessage(content=self.system_message)
-
-        self.messages = MessageBuffer(
-            [
-                self._system_message,
-                *self.init_messages,
-            ],
-            verbose=self.verbose,
-        )
 
     def _complete_failure(self, message: Message | None = None) -> Message:
         self.messages.add(message)
@@ -73,14 +80,6 @@ class Session:
     def _handle_choice(self, choice: Choice) -> list[Message]:
         match choice.message:
             case AssistantMessage(content, FunctionCall(name, arguments)):
-                if self.debug:
-                    pprint(
-                        {
-                            "finish_reason": choice.finish_reason,
-                            "name": name,
-                            "arguments": arguments,
-                        }
-                    )
                 result_message = self._handle_function_call(name, arguments)
                 return [choice.message, result_message]
             case AssistantMessage(content, None):
@@ -97,6 +96,8 @@ class Session:
         if name in function_names:
             func = next(func for func in self.functions if func.__name__ == name)
             results = execute_function_call(func, arguments)
+            if self.debug:
+                console.print(results)
 
             match results.error, results.result:
                 case None, result:
@@ -142,11 +143,17 @@ class Session:
     ) -> list[Completion]:
         self.messages.add(message)
 
-        response = self.llm.complete(
-            messages=self.messages,
-            n_choices=n_choices,
+        llm_complete, messages, params = self.dispatcher.dispatch(self)
+
+        response = llm_complete(
+            messages=messages,
             functions=self.functions,
+            n_choices=n_choices,
+            **params,
         )
+
+        if self.debug:
+            console.print(response)
 
         completions = []
         completion_messages = []
@@ -158,7 +165,5 @@ class Session:
             )
 
         self.messages.add_messages(completion_messages)
-        if self.autocommit:
-            self.messages.commit()
 
         return completions

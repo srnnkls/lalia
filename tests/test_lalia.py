@@ -188,8 +188,8 @@ session = Session(
         ),
     ],
     functions={sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query},
-    verbose=True,
     autocommit=False,
+    debug=True,
 )
 
 
@@ -227,3 +227,8 @@ run_query("Can you include the product's price?")
 run_query("List the 10 most expensive products.")
 run_query("Where does Annie Toy live?")
 run_query("Please give me the street and the city.")
+
+llm = OpenAIChat(
+    model=ChatModel.GPT3_5_TURBO_0613,
+    api_key=get_openai_token(),
+)

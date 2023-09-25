@@ -110,6 +110,11 @@ class AssistantMessage:
         if isinstance(self.function_call, dict):
             self.function_call = FunctionCall(**self.function_call)
 
+    def _repr_mimebundle_(
+        self, include: Sequence[str], exclude: Sequence[str], **kwargs
+    ) -> dict[str, str]:
+        return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
+
     def to_base_message(self) -> BaseMessage:
         if self.function_call is None:
             return BaseMessage(role=Role.ASSISTANT, content=self.content)
@@ -125,6 +130,11 @@ class AssistantMessage:
 class FunctionMessage:
     content: str
     name: str
+
+    def _repr_mimebundle_(
+        self, include: Sequence[str], exclude: Sequence[str], **kwargs
+    ) -> dict[str, str]:
+        return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
 
     def to_base_message(self) -> BaseMessage:
         return BaseMessage(role=Role.FUNCTION, name=self.name, content=self.content)
