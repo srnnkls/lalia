@@ -1,0 +1,28 @@
+#+title: An LLM interaction lib for getML
+
+* Requirements
+** Session
+*** Linear representation of a communication
+*** Support roles and messages
+*** Simple interfaces
+*** Use standard python tooling as much as possible
+*** Persistence
+*** Lenient parsing of responses
+**** Auto-fixing parsing errors
+*** Support function calling
+**** Support the use of ordinary python functions
+**** Infer functions' json schema from type hints, metadata and doc strings
+** Dispatcher
+#+begin_src python
+@dataclass
+class DispatchCall:
+    messages: list[Message]
+    complete: Callable[[list[Message]], Message]
+
+class Dispatcher(Protocol):
+    llms: Iterable[LLM]
+    session: Session
+
+    def dispatch(self, messages: list[Message]) -> DispatchCall:
+        ...
+#+end_src

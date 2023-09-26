@@ -40,10 +40,12 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         func = callable_.__call__
         name = type(callable_).__name__
         doc = func.__doc__ if func.__doc__ else type(callable_).__doc__
-    else:
+    elif callable(callable_):
         func = callable_
         name = func.__name__
         doc = func.__doc__
+    else:
+        raise ValueError(f"Not a callable: {callable_}")
 
     pydantic_schema = validate_arguments(func).model.schema()
     parameters = inspect.signature(func).parameters

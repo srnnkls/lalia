@@ -17,15 +17,8 @@ from lalia.functions import get_schema
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
 
-def _to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
-    return [
-        {
-            key: value
-            for key, value in asdict(message.to_base_message()).items()
-            if value is not None or key == "content"
-        }
-        for message in messages
-    ]
+def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    return [message.to_base_message().to_raw_message() for message in messages]
 
 
 class FunctionCallDirective(StrEnum):
@@ -98,34 +91,23 @@ class OpenAIChat:
         functions: Sequence[Callable[..., Any]]
         | Iterable[Callable[..., Any]]
         | None = None,
-        function_call: FunctionCallDirective | str = FunctionCallDirective.NONE,
+        function_call: FunctionCallDirective
+        | dict[str, str] = FunctionCallDirective.NONE,
         n_choices: int = 1,
         temperature: float | None = None,
         model: ChatModel | None = None,
     ) -> ChatCompletionResponse:
-        if temperature is None:
-            temperature = self.temperature
-        if model is None:
-            model = self.model
-
         func_schemas = [get_schema(func) for func in functions] if functions else []
 
-        params = {
-            "model": model,
-            "messages": _to_raw_messages(messages),
-            "api_key": self._api_key,
-            "n": n_choices,
-            "temperature": temperature,
-        }
-
-        if func_schemas:
-            params["functions"] = func_schemas
-            if function_call is FunctionCallDirective.NONE:
-                params["function_call"] = FunctionCallDirective.AUTO
-
-        messages = list(messages)
         for _ in range(self.max_retries):
-            raw_response = openai.ChatCompletion.create(**params)
+            raw_response = self.complete_raw(
+                messages=to_raw_messages(messages),
+                functions=func_schemas,
+                function_call=function_call,
+                n_choices=n_choices,
+                temperature=temperature,
+                model=model,
+            )
             if self.debug:
                 pprint(raw_response)
             self._responses.append(raw_response)  # type: ignore
@@ -138,3 +120,37 @@ class OpenAIChat:
                 return response
 
         return self._complete_failure(messages)
+
+    def complete_raw(
+        self,
+        messages: Sequence[dict[str, Any]],
+        functions: Sequence[dict[str, Any]] | Iterable[dict[str, Any]] | None = None,
+        function_call: FunctionCallDirective
+        | dict[str, str] = FunctionCallDirective.NONE,
+        n_choices: int = 1,
+        temperature: float | None = None,
+        model: ChatModel | None = None,
+    ) -> dict[str, Any]:
+        if temperature is None:
+            temperature = self.temperature
+        if model is None:
+            model = self.model
+
+        params = {
+            "model": model,
+            "messages": messages,
+            "api_key": self._api_key,
+            "n": n_choices,
+            "temperature": temperature,
+        }
+
+        if functions:
+            params["functions"] = functions
+            if function_call is FunctionCallDirective.NONE:
+                params["function_call"] = FunctionCallDirective.AUTO
+            else:
+                params["function_call"] = function_call
+
+        messages = list(messages)
+
+        return openai.ChatCompletion.create(**params)  # type: ignore

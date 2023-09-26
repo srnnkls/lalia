@@ -39,13 +39,6 @@ class BaseMessage:
     content: str | None = None
     function_call: dict[str, Any] | None = None
 
-    def parse(self) -> Message:
-        match self.content:
-            case None:
-                return self._parse_no_content_case()
-            case content:
-                return self._parse_content_case(content)
-
     def _parse_no_content_case(self) -> Message:
         match (self.role, self.function_call):
             case (Role.ASSISTANT, None):
@@ -73,6 +66,20 @@ class BaseMessage:
                 return FunctionMessage(name=self.name, content=content)
             case _:
                 raise ValueError(f"Unsupported role: {self.role}")
+
+    def parse(self) -> Message:
+        match self.content:
+            case None:
+                return self._parse_no_content_case()
+            case content:
+                return self._parse_content_case(content)
+
+    def to_raw_message(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in asdict(self).items()
+            if value is not None or key == "content"
+        }
 
 
 @dataclass
