@@ -18,14 +18,17 @@ class SequentialDispatcher:
 
     def __init__(self):
         self._stack = deque()
+        self._called = deque()
 
     def dispatch(self, session: Session) -> DispatchCall:
         if not self._stack:
             self._stack.extend(session.functions)
+
         params = {}
 
         func = self._stack.popleft().__name__
-        params["func"] = func
+        self._called.append(func)
+        params["function_call"] = {"name": func}
 
         return DispatchCall(
             callback=session.llm.complete,
@@ -33,10 +36,14 @@ class SequentialDispatcher:
             params=params,
         )
 
+    def reset(self) -> None:
+        self._stack.extendleft(self._called)
+        self._called.clear()
+
 
 def first(first_step: str) -> str:
     """
-    We create a Gin Fizz. In three steps.
+    Create a dring in three steps.
 
     Provide the first step.
     """
@@ -45,7 +52,7 @@ def first(first_step: str) -> str:
 
 def second(second_step: str) -> str:
     """
-    We create a Gin Fizz. In three steps.
+    Create a drink in three steps.
 
     Provide the second step.
     """
@@ -54,7 +61,7 @@ def second(second_step: str) -> str:
 
 def third(third_step: str) -> str:
     """
-    We create a Gin Fizz. In three steps.
+    Create a drink in three steps.
 
     Provide the third and last step.
     """
@@ -63,7 +70,7 @@ def third(third_step: str) -> str:
 
 session = Session(
     llm=OpenAIChat(
-        model=ChatModel.GPT3_5_TURBO_0613,
+        model=ChatModel.GPT_3_5_TURBO_0613,
         api_key=get_openai_token(),
     ),
     system_message="You are a Bartender. Use the provided functions to answer your questions.",

@@ -174,7 +174,7 @@ SYSTEM_TEMPLATE = cleandoc(
 
 session = Session(
     llm=OpenAIChat(
-        model=ChatModel.GPT3_5_TURBO_0613,
+        model=ChatModel.GPT_3_5_TURBO_0613,
         temperature=0.0,
         api_key=get_openai_token(),
     ),
@@ -229,6 +229,6 @@ run_query("Where does Annie Toy live?")
 run_query("Please give me the street and the city.")
 
 llm = OpenAIChat(
-    model=ChatModel.GPT3_5_TURBO_0613,
+    model=ChatModel.GPT_3_5_TURBO_0613,
     api_key=get_openai_token(),
 )
