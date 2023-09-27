@@ -1,0 +1,240 @@
+#+title: An LLM interaction library for getML
+
+#+PROPERTY: header-args:python  :results output :session llm
+
+* Motivation
+** Langchain is...
+- ... a library with bad code quality
+- ... full of (unnecessary) overcomplex abstractions
+- ... makes simple things astonishing hard
+- ... using inheritance for code sharing
+- ... doing too many things (and nothing really well)
+  [[file:assets/langchain_integrations.png][Langchain integrations]]
+  [[https://minimaxir.com/2023/07/langchain-problem/][The Problem with Langchain (minimaxir.com)]]
+  #+begin_quote
+  LangChain is building a [[https://www.vaneck.com/nl/en/moat-investing/five-sources-of-moats-whitepaper.pdf][moat]], which is good for LangChain’s investors trying to get a return on their $30 million, but very very bad for developers who use it.
+  - Max Woolf
+  #+end_quote
+** Consequences
+- BAD DX (not attractive to work with)
+- Slows down cobi's development
+- Binds too many developer resources
+- Hinders knowledge exchange/dissemination
+** Alternatives
+- Langchain
+- LLaMaindex
+- guidance
+- LMQL
+- Alphawave
+- simpleaichat
+* Doing it better
+** Requirements
+- Linear representation of communication
+- Support roles and messages
+- Simple interfaces
+- Use standard python tooling as much as possible
+- Persistence out of the box
+- Lenient parsing of responses
+  - Auto-fixing parsers
+- Support function calling
+  - Support the use of ordinary python functions
+  - Infer functions' JSONschema from type hints, metadata and doc strings
+** Out of Scope
+- Retrieval
+- Advanced/dynamic templating (cf. LMQL/guidance)
+* Introducing...
+** lalia (λᾰλῐᾱ́)
+
+#+begin_quote
+Ancient Greek
+Noun
+λᾰλῐᾱ́ [[https://en.m.wiktionary.org/wiki/Wiktionary:Ancient_Greek_transliteration][•]] (laliā́) genitive ([[https://en.m.wiktionary.org/w/index.php?title=%CE%BB%CE%B1%CE%BB%CE%B9%E1%BE%B6%CF%82&action=edit&redlink=1][λᾰλῐᾶς]]); ([[https://en.m.wiktionary.org/wiki/Appendix:Ancient_Greek_first_declension][first declension]])
+1. [[https://en.m.wiktionary.org/wiki/talking][talking]], [[https://en.m.wiktionary.org/wiki/talk][talk]], [[https://en.m.wiktionary.org/wiki/chat][chat]]
+#+end_quote
+
+** Design/API
+*** ~LLM~
+Thin wrapper to interact with an LLM.
+
+#+begin_src python
+class LLM(Protocol):
+
+    def complete(messages: Sequence[Message], ...) -> ChatCompletionResponse:
+        ...
+
+    def complete_raw(messages: Sequence[Message], ...) -> dict[str, Any]:
+        ...
+#+end_src
+
+*** ~Session~
+The core object to interact with. Stateful; supports transcational
+semantics.
+
+#+begin_src python
+class Session(Protocol):
+
+    def __call__(message: Message | str | None) -> Message:
+        ...
+
+    def add(message: Message):
+        ...
+
+    def clear():
+        ...
+
+    def commit():
+        ...
+
+    def complete(message: Message | None) -> Completion:
+        ...
+
+    def reset():
+        ...
+
+    def revert():
+        ...
+
+    def rollback():
+        ...
+#+end_src
+
+**** Basic
+[[file:examples/basic.py][basic.py]]
+
+#+begin_src python
+from lalia.llm.openai import OpenAIChat, ChatModel
+from lalia.chat.session import Session
+from cobi.utils.auth.secrets import get_openai_token
+
+llm = OpenAIChat(
+    model=ChatModel.GPT_3_5_TURBO_0613,
+    api_key=get_openai_token(),
+)
+
+session = Session(llm=llm, system_message="You are a vet.")
+session("Is it wise to stroke a boar?")
+#+end_src
+
+**** Elon
+[[file:examples/elon.py][elon.py]]
+
+#+begin_src python
+from lalia.chat.messages import SystemMessage
+elon = Session(llm=llm, system_message="You are Elon Musk, introduce yourself through emojis.")
+elon()
+elon("You have been rejected by Berghain.")
+elon.autocommit = False
+elon.messages.add(SystemMessage("Stop using emojis."))
+elon("What is your favorite car?")
+elon.rollback()
+elon("What is your favorite rocket?")
+elon.commit()
+elon.revert()
+elon.reset()
+#+end_src
+
+*** ~Dispatcher~
+
+[[file:examples/dispatcher.py][dispatcher.py]]
+#+begin_src python
+class DispatchCall(Protocol):
+    callback: LLMCallback
+    messages: MessageBuffer
+    params: dict[str, Any]
+    finish_reason: FinishReason
+
+class Dispatcher(Protocol):
+    def dispatch(self, session: Session) -> DispatchCall:
+        ...
+
+    def reset(self):
+        ...
+
+#+end_src
+*** ~Parser~
+
+#+begin_src python
+class Parser(Protocol):
+    def parse(
+        self, payload: str, model: type[BaseModel], messages: Sequence[Message] = ()
+    ) -> tuple[dict[str, Any], list[Message]]:
+        ...
+#+end_src
+
+[[file:examples/parser.py][parser.py]]
+
+#+begin_src python :results silent
+from pydantic import BaseModel
+
+from cobi.utils.auth.secrets import get_openai_token
+from lalia.io.parsers import LLMParser
+from lalia.llm.openai import ChatModel, OpenAIChat
+
+llm = OpenAIChat(
+    model=ChatModel.GPT_3_5_TURBO_0613,
+    api_key=get_openai_token(),
+    temperature=0.0,
+)
+
+
+class A(BaseModel):
+    b: str
+    c: int
+
+
+parser = LLMParser(llms=[llm], max_retries=10)
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"b": "test", "c": 99}', model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse("b: test\nc: 99", model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"b": "test"}', model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"a": "test", "c": 99}', model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"b": ["test"], "c": 99}', model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"b": {"test": "test"}, "c": 99}', model=A))
+#+end_src
+
+#+begin_src python
+print(parser.parse('{"b": {"test": ""}, "c": 99}', model=A))
+#+end_src
+*** ~MessageBuffer~
+In-memory container for ~Messages~ with transcational semantics and pluggable
+storage backend.
+
+#+begin_src python
+class MessageBuffer(Protocol):
+    def add(message: Message):
+        ...
+
+    def clear():
+        ...
+
+    def commit():
+        ...
+
+    def reset():
+        ...
+
+    def revert():
+        ...
+
+    def rollback():
+        ...
+#+end_src
+
+** Code walkthrough
