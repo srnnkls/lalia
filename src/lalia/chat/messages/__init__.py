@@ -6,4 +6,5 @@ from lalia.chat.messages.messages import (
     Message,
     SystemMessage,
     UserMessage,
+    to_raw_messages,
 )

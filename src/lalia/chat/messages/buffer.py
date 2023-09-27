@@ -48,17 +48,20 @@ class MessageBuffer(Sequence[Message]):
     def clear(self):
         self.messages = []
         self.pending = []
+        self._transactional_bounds = []
 
     def commit(self):
-        self._transactional_bounds.append((len(self.messages), len(self.pending)))
+        self._transactional_bounds.append(
+            (len(self.messages), len(self.messages) + len(self.pending))
+        )
         self.messages.extend(self.pending)
         self.pending = []
 
     def rollback(self):
         self.pending = []
 
-    def revert(self, transaction: int = -1):
+    def revert(self):
         if self._transactional_bounds:
-            start, end = self._transactional_bounds.pop(transaction)
+            start, end = self._transactional_bounds.pop()
             self.pending = self.messages[start:end] + self.pending
             self.messages = self.messages[:start]

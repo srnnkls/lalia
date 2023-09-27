@@ -8,7 +8,7 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 
-from lalia.chat import dispatcher
+from lalia.chat import dispatchers
 from lalia.chat.completions import Completion, FinishReason
 from lalia.chat.messages import (
     AssistantMessage,
@@ -36,8 +36,8 @@ class Session:
     functions: Sequence[Callable[..., Any]] | Iterable[Callable[..., Any]] = field(
         default_factory=set
     )
-    dispatcher: dispatcher.Dispatcher = field(
-        default_factory=dispatcher.FunctionsDispatcher
+    dispatcher: dispatchers.Dispatcher = field(
+        default_factory=dispatchers.FunctionsDispatcher
     )
     autocommit: bool = True
     memory: int = 100
@@ -62,6 +62,7 @@ class Session:
         for _ in range(self.max_iterations):
             assistant_message, finish_reason = self.complete()
             if finish_reason is FinishReason.STOP:
+                self.dispatcher.reset()
                 if self.autocommit:
                     self.messages.commit()
                 return assistant_message
@@ -79,16 +80,20 @@ class Session:
 
     def _handle_choice(self, choice: Choice) -> list[Message]:
         match choice.message:
-            case AssistantMessage(content, FunctionCall(name, arguments)):
+            case AssistantMessage(_, FunctionCall(name, arguments)):
                 result_message = self._handle_function_call(name, arguments)
                 return [choice.message, result_message]
-            case AssistantMessage(content, None):
+            case AssistantMessage(_, None):
                 return [choice.message]
             case AssistantMessage(None, None):
+                self.dispatcher.reset()
+                self.rollback()
                 raise ValueError(
                     "AssistantMessages without `content` must have a `function_call`"
                 )
             case _:
+                self.dispatcher.reset()
+                self.rollback()
                 raise ValueError(f"Unsupported message type: {type(choice.message)}")
 
     def _handle_function_call(self, name: str, arguments: dict[str, Any]) -> Message:
@@ -105,6 +110,8 @@ class Session:
                 case Error(message), None:
                     return SystemMessage(content=f"Error: {message}")
                 case _:
+                    self.dispatcher.reset()
+                    self.rollback()
                     raise ValueError("Either `error` or `result` must be `None`")
 
         return SystemMessage(content=f)
@@ -117,23 +124,8 @@ class Session:
     def add(self, message: Message) -> None:
         self.messages.add(message)
 
-    def commit(self) -> None:
-        self.messages.commit()
-
-    def rollback(self) -> None:
-        self.messages.rollback()
-
     def clear(self) -> None:
         self.messages.clear()
-
-    def reset(self) -> None:
-        if isinstance(self.system_message, str):
-            self.system_message = SystemMessage(content=self.system_message)
-        self.messages.clear()
-        self.messages.messages = [self.system_message, *self.init_messages]
-
-    def revert(self, transaction: int = -1) -> None:
-        self.messages.revert(transaction)
 
     def complete(self, message: Message | None = None) -> Completion:
         return next(iter(self.complete_choices(message, n_choices=1)))
@@ -143,7 +135,12 @@ class Session:
     ) -> list[Completion]:
         self.messages.add(message)
 
-        llm_complete, messages, params = self.dispatcher.dispatch(self)
+        (
+            llm_complete,
+            messages,
+            params,
+            dispatcher_finish_reason,
+        ) = self.dispatcher.dispatch(self)
 
         response = llm_complete(
             messages=messages,
@@ -160,10 +157,27 @@ class Session:
 
         for choice in response.choices:
             completion_messages.extend(self._handle_choice(choice))
-            completions.append(
-                Completion(completion_messages[-1], choice.finish_reason)
-            )
+            if dispatcher_finish_reason is FinishReason.DELEGATE:
+                finish_reason = choice.finish_reason
+            else:
+                finish_reason = dispatcher_finish_reason
+            completions.append(Completion(completion_messages[-1], finish_reason))
 
         self.messages.add_messages(completion_messages)
 
         return completions
+
+    def commit(self) -> None:
+        self.messages.commit()
+
+    def reset(self) -> None:
+        if isinstance(self.system_message, str):
+            self.system_message = SystemMessage(content=self.system_message)
+        self.messages.clear()
+        self.messages.messages = [self.system_message, *self.init_messages]
+
+    def revert(self) -> None:
+        self.messages.revert()
+
+    def rollback(self) -> None:
+        self.messages.rollback()

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import InitVar
 from inspect import cleandoc
 from pprint import pprint
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ValidationError
 from pydantic.dataclasses import dataclass
@@ -13,8 +14,10 @@ from ruamel.yaml.error import YAMLError
 
 from lalia.chat.messages import BaseMessage, Message, SystemMessage
 from lalia.chat.roles import Role
-from lalia.llm import LLM
-from lalia.llm.openai import to_raw_messages
+
+if TYPE_CHECKING:
+    from lalia.llm import LLM
+from lalia.chat.messages import to_raw_messages
 
 yaml = YAML(typ="safe")
 
@@ -25,7 +28,9 @@ VALIDARION_FAILURE_DIRECTIVE = cleandoc(
 
     Are all required parameters provided?
 
-    If partial input is provided, return the completed input and leave the provided input as is.
+    DON'T change any parameters that are provided and are not
+    fail the validation. If you provide corrected input, just
+    restate the respective parameters.
     """
 )
 
@@ -44,18 +49,19 @@ def get_model_schema(model: type[BaseModel]) -> dict[str, Any]:
     return func_schema
 
 
+@runtime_checkable
 class Parser(Protocol):
     def parse(
-        self, payload: str, messages: Sequence[Message] = ()
-    ) -> tuple[Message, dict[str, Any]]:
+        self, payload: str, model: type[BaseModel], messages: Sequence[Message] = ()
+    ) -> tuple[dict[str, Any], list[Message]]:
         ...
 
 
-@dataclass
 class LLMParser:
-    llms: Sequence[LLM]
-    max_retries: int = 5
-    debug: bool = False
+    def __init__(self, llms: Sequence[LLM], max_retries: int = 10, debug: bool = False):
+        self.llms = llms
+        self.max_retries = max_retries
+        self.debug = debug
 
     def _complete_invalid_input(
         self,

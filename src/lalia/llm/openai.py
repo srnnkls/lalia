@@ -7,18 +7,15 @@ from pprint import pprint
 from typing import Any
 
 import openai
-from pydantic import ValidationError
+from pydantic import ConfigDict, ValidationError, validate_arguments
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
-from lalia.chat.messages import BaseMessage, Message, SystemMessage, UserMessage
+from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
 from lalia.functions import get_schema
+from lalia.io.parsers import LLMParser, Parser
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
-
-
-def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
-    return [message.to_base_message().to_raw_message() for message in messages]
 
 
 class FunctionCallDirective(StrEnum):
@@ -49,13 +46,14 @@ class ChatCompletionResponse:
             self.created = datetime.fromtimestamp(self.created, UTC)
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
 class OpenAIChat:
     model: ChatModel
     api_key: InitVar[str]
     temperature: float = 1.0
     max_retries: int = 5
     debug: bool = False
+    parser: type[Parser] = LLMParser
 
     failure_messages: list[Message] = field(
         default_factory=lambda: [
@@ -85,6 +83,21 @@ class OpenAIChat:
         )
         return self.complete(messages)
 
+    def _parse_function_call_args(
+        self, response: dict[str, Any], functions: Iterable[Callable[..., Any]]
+    ) -> dict[str, Any]:
+        if "function_call" in response["choices"][0]["message"]:
+            parser = self.parser(llms=[self], debug=self.debug)
+            name = response["choices"][0]["message"]["function_call"]["name"]
+            arguments = response["choices"][0]["message"]["function_call"]["arguments"]
+            func = next(iter(func for func in functions if func.__name__ == name))
+            model = validate_arguments(func).model
+            args, _ = parser.parse(arguments, model)
+            response["choices"][0]["message"]["function_call"]["arguments"] = args
+            return response
+        else:
+            return response
+
     def complete(
         self,
         messages: Sequence[Message],
@@ -92,7 +105,7 @@ class OpenAIChat:
         | Iterable[Callable[..., Any]]
         | None = None,
         function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.NONE,
+        | dict[str, str] = FunctionCallDirective.AUTO,
         n_choices: int = 1,
         temperature: float | None = None,
         model: ChatModel | None = None,
@@ -108,13 +121,12 @@ class OpenAIChat:
                 temperature=temperature,
                 model=model,
             )
-            if self.debug:
-                pprint(raw_response)
-            self._responses.append(raw_response)  # type: ignore
+            if functions:
+                raw_response = self._parse_function_call_args(raw_response, functions)
             try:
-                response = ChatCompletionResponse(**raw_response)  # type: ignore
+                response = ChatCompletionResponse(**raw_response)
             except (ValidationError, json.JSONDecodeError) as e:
-                self._complete_invalid_input(messages, raw_response, e)  # type: ignore
+                self._complete_invalid_input(messages, e)
                 continue
             else:
                 return response
@@ -126,7 +138,7 @@ class OpenAIChat:
         messages: Sequence[dict[str, Any]],
         functions: Sequence[dict[str, Any]] | Iterable[dict[str, Any]] | None = None,
         function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.NONE,
+        | dict[str, str] = FunctionCallDirective.AUTO,
         n_choices: int = 1,
         temperature: float | None = None,
         model: ChatModel | None = None,
@@ -146,11 +158,14 @@ class OpenAIChat:
 
         if functions:
             params["functions"] = functions
-            if function_call is FunctionCallDirective.NONE:
-                params["function_call"] = FunctionCallDirective.AUTO
-            else:
-                params["function_call"] = function_call
+            params["function_call"] = function_call
 
         messages = list(messages)
 
-        return openai.ChatCompletion.create(**params)  # type: ignore
+        raw_response = openai.ChatCompletion.create(**params)
+
+        if self.debug:
+            pprint(raw_response)
+        self._responses.append(raw_response)  # type: ignore
+
+        return raw_response.to_dict()  # type: ignore

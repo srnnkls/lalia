@@ -99,7 +99,7 @@ def sql_db_pre_select_tables(
 
 def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> str:
     """
-    Use this function to double check if your query is correct before executing it.
+    Use this function to check a SQL query before executing it.
 
     Use this function before executing a query with sql_db_execute_query! Use the
     reproduced query as input for sql_db_execute_query.
@@ -150,17 +150,17 @@ def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> 
 
 SYSTEM_TEMPLATE = cleandoc(
     """
-    You are an agent designed to interact with a SQL database. Given an input question,
-    create a syntactically correct PostgresSQL query to run, then look at the results of
-    the query and return the answer.  Unless the user specifies a specific number of
-    examples they wish to obtain, never limit your queries.  You can order the results
-    by a relevant column to return the most interesting examples in the database.  Never
-    query for all the columns from a specific table, only ask for the relevant columns
-    given the question.
+    You are an assistant that interacts with a SQL database behind a shopware
+    webshop. Given an input question, create a syntactically correct PostgresSQL
+    query to run, then look at the results of the query and return the answer.
+    Unless the user specifies a specific number of examples they wish to obtain,
+    never limit your queries.  You can order the results by a relevant column to
+    return the most interesting examples in the database.  Never query for all
+    the columns from a specific table, only ask for the relevant columns given
+    the question.
 
-    ALWAYS check your queries using the sql_db_check_query before executing them.
-
-    IF you receive an error look at the schema and try to adjust the query.
+    IF you receive an error look at the schema and try to adjust the query and supply
+    the adjusted query to sql_db_check_query.
 
     DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
@@ -227,8 +227,3 @@ run_query("Can you include the product's price?")
 run_query("List the 10 most expensive products.")
 run_query("Where does Annie Toy live?")
 run_query("Please give me the street and the city.")
-
-llm = OpenAIChat(
-    model=ChatModel.GPT_3_5_TURBO_0613,
-    api_key=get_openai_token(),
-)

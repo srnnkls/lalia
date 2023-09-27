@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import asdict
 from typing import Any
 
-from pydantic import ConfigDict, validate_arguments
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
@@ -14,6 +13,10 @@ from lalia.chat.roles import Role
 from lalia.io.renderers import MessageRenderer
 
 yaml = YAML(typ="safe")
+
+
+def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    return [message.to_base_message().to_raw_message() for message in messages]
 
 
 @dataclass

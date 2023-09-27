@@ -15,6 +15,7 @@ class FinishReason(StrEnum):
     LENGTH = "length"
     FUNCTION_CALL = "function_call"
     CONTENT_FILTER = "content_filter"
+    DELEGATE = "delegate"
     NULL = "null"
 
 
