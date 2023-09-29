@@ -1,12 +1,11 @@
 import inspect
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from types import BuiltinFunctionType, FunctionType
 from typing import Annotated, Any, get_origin, get_type_hints
 
-from pydantic import ValidationError, validate_arguments
+from pydantic import ValidationError, validate_call
 from pydantic.dataclasses import dataclass
-
-from lalia.chat.messages import Message
+from pydantic.json_schema import GenerateJsonSchema, model_json_schema
 
 
 @dataclass
@@ -40,15 +39,20 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         func = callable_.__call__
         name = type(callable_).__name__
         doc = func.__doc__ if func.__doc__ else type(callable_).__doc__
+        parameters = dict(list(inspect.signature(func).parameters.items())[1:])
+
     elif callable(callable_):
         func = callable_
         name = func.__name__
         doc = func.__doc__
+        parameters = inspect.signature(func).parameters
+
     else:
         raise ValueError(f"Not a callable: {callable_}")
 
-    pydantic_schema = validate_arguments(func).model.schema()
-    parameters = inspect.signature(func).parameters
+    schema_generator = GenerateJsonSchema()
+    pydantic_model = validate_call(func)
+    pydantic_schema = schema_generator.generate(pydantic_model.__pydantic_core_schema__)
 
     schema = {
         "name": name,
@@ -67,7 +71,9 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         if get_origin(annotation) is Annotated:
             data["description"] = next(iter(annotation.__metadata__), "")
 
-    schema["required"] = pydantic_schema["required"]
+    schema["required"] = [
+        name for name in pydantic_schema["required"] if name in parameters
+    ]
 
     return schema
 
@@ -75,9 +81,9 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 def execute_function_call(
     func: Callable[..., Any], arguments: dict[str, Any]
 ) -> FunctionCallResult:
-    validator = validate_arguments(func).model
+    validator = validate_call(func).__pydantic_validator__
     try:
-        validator.parse_obj(arguments)
+        validator.validate_python(arguments)
     except ValidationError as e:
         return FunctionCallResult(
             name=func.__name__,

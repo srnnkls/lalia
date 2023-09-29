@@ -67,7 +67,7 @@ class SequentialDispatcher:
 
 def first(first_step: str) -> str:
     """
-    Create a dring in three steps.
+    Create a drink in three steps.
 
     Provide the first step of a cocktail recipe.
     """
@@ -92,13 +92,13 @@ def third(third_step: str) -> str:
     return third_step
 
 
-bar_tender = Session(
+bartender = Session(
     llm=OpenAIChat(
         model=ChatModel.GPT_3_5_TURBO_0613,
         api_key=get_openai_token(),
     ),
     system_message=(
-        "You are a Bartender. Use the provided functions to answer your questions. "
+        "You are a bartender. Use the provided functions to answer your questions. "
         "The number of steps should match the number of function calls."
     ),
     functions=[first, second, third],
@@ -107,8 +107,8 @@ bar_tender = Session(
     dispatcher=SequentialDispatcher(),
 )
 
-bar_tender("How to prepare a Gin Fizz?")
+bartender("How to prepare a Gin Fizz?")
 
-bar_tender.verbose = False
+bartender.verbose = False
 
-bar_tender("How to prepare a Vesper Martini?")
+bartender("How to prepare a Vesper Martini?")

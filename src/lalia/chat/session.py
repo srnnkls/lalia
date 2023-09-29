@@ -33,9 +33,7 @@ class Session:
         default_factory=lambda: SystemMessage(content="")
     )
     init_messages: Sequence[Message] = field(default_factory=list)
-    functions: Sequence[Callable[..., Any]] | Iterable[Callable[..., Any]] = field(
-        default_factory=set
-    )
+    functions: Sequence[Callable[..., Any]] = field(default_factory=set)
     dispatcher: dispatchers.Dispatcher = field(
         default_factory=dispatchers.FunctionsDispatcher
     )

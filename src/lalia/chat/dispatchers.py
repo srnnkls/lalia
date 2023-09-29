@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
-from lalia.chat.completions import FinishReason
 
+from lalia.chat.completions import FinishReason
 from lalia.chat.messages import Message
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDirective
@@ -21,9 +21,7 @@ class LLMCallback(Protocol):
     def __call__(
         self,
         messages: Sequence[Message],
-        functions: Sequence[Callable[..., Any]]
-        | Iterable[Callable[..., Any]]
-        | None = None,
+        functions: Sequence[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.NONE,
         n_choices: int = 1,

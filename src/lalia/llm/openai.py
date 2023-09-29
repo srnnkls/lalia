@@ -1,13 +1,13 @@
 import json
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import InitVar, asdict, field
+from dataclasses import InitVar, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pprint import pprint
 from typing import Any
 
 import openai
-from pydantic import ConfigDict, ValidationError, validate_arguments
+from pydantic import ConfigDict, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
@@ -91,7 +91,7 @@ class OpenAIChat:
             name = response["choices"][0]["message"]["function_call"]["name"]
             arguments = response["choices"][0]["message"]["function_call"]["arguments"]
             func = next(iter(func for func in functions if func.__name__ == name))
-            model = validate_arguments(func).model
+            model = validate_call(func)
             args, _ = parser.parse(arguments, model)
             response["choices"][0]["message"]["function_call"]["arguments"] = args
             return response
@@ -101,9 +101,7 @@ class OpenAIChat:
     def complete(
         self,
         messages: Sequence[Message],
-        functions: Sequence[Callable[..., Any]]
-        | Iterable[Callable[..., Any]]
-        | None = None,
+        functions: Iterable[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         n_choices: int = 1,
@@ -136,7 +134,7 @@ class OpenAIChat:
     def complete_raw(
         self,
         messages: Sequence[dict[str, Any]],
-        functions: Sequence[dict[str, Any]] | Iterable[dict[str, Any]] | None = None,
+        functions: Iterable[dict[str, Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         n_choices: int = 1,

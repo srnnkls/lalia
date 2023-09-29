@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import InitVar
 from inspect import cleandoc
 from pprint import pprint
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ValidationError
+from pydantic._internal._validate_call import ValidateCallWrapper
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
@@ -21,7 +21,7 @@ from lalia.chat.messages import to_raw_messages
 
 yaml = YAML(typ="safe")
 
-VALIDARION_FAILURE_DIRECTIVE = cleandoc(
+VALIDATION_FAILURE_DIRECTIVE = cleandoc(
     """
     Error: {error}
     Invalid payload: {payload}
@@ -66,7 +66,7 @@ class LLMParser:
     def _complete_invalid_input(
         self,
         payload: str,
-        model: type[BaseModel],
+        model: type[BaseModel | ValidateCallWrapper],
         messages: Sequence[dict[str, Any]],
         llm: LLM,
         e: Exception,
@@ -74,7 +74,7 @@ class LLMParser:
         match e:
             case ValidationError():
                 failure_message = SystemMessage(
-                    content=VALIDARION_FAILURE_DIRECTIVE.format(
+                    content=VALIDATION_FAILURE_DIRECTIVE.format(
                         error=e, payload=payload
                     )
                 )
@@ -126,14 +126,18 @@ class LLMParser:
             raise ValueError("No function_call for completion.")
 
     def parse(
-        self, payload: str, model: type[BaseModel], messages: Sequence[Message] = ()
+        self,
+        payload: str,
+        model: type[BaseModel | ValidateCallWrapper],
+        messages: Sequence[Message] = (),
     ) -> tuple[dict[str, Any], list[Message]]:
         raw_messages = to_raw_messages(messages)
         for llm in self.llms:
             for _ in range(self.max_retries):
                 try:
                     obj = self._deserialize(payload)
-                    model.parse_obj(obj)
+                    validator = model.__pydantic_validator__
+                    validator.validate_python(obj)
                 except (json.JSONDecodeError, YAMLError, ValidationError) as e:
                     payload, message = self._complete_invalid_input(
                         payload, model, raw_messages, llm, e
