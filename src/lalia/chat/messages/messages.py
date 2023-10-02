@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, field
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic.dataclasses import dataclass
@@ -10,6 +11,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from lalia.chat.roles import Role
+from lalia.io.models.openai import ChatCompletionResponseMessage
 from lalia.io.renderers import MessageRenderer
 
 yaml = YAML(typ="safe")
@@ -41,6 +43,7 @@ class BaseMessage:
     name: str | None = None
     content: str | None = None
     function_call: dict[str, Any] | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _parse_no_content_case(self) -> Message:
         match (self.role, self.function_call):
@@ -81,13 +84,15 @@ class BaseMessage:
         return {
             key: value
             for key, value in asdict(self).items()
-            if value is not None or key == "content"
+            if key in set(ChatCompletionResponseMessage.model_fields) | {"name"}
+            and (value is not None or key == "content")
         }
 
 
 @dataclass
 class SystemMessage:
     content: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -95,12 +100,15 @@ class SystemMessage:
         return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
 
     def to_base_message(self) -> BaseMessage:
-        return BaseMessage(role=Role.SYSTEM, content=self.content)
+        return BaseMessage(
+            role=Role.SYSTEM, content=self.content, timestamp=self.timestamp
+        )
 
 
 @dataclass
 class UserMessage:
     content: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -108,13 +116,16 @@ class UserMessage:
         return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
 
     def to_base_message(self) -> BaseMessage:
-        return BaseMessage(role=Role.USER, content=self.content)
+        return BaseMessage(
+            role=Role.USER, content=self.content, timestamp=self.timestamp
+        )
 
 
 @dataclass
 class AssistantMessage:
     content: str | None = None
     function_call: FunctionCall | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def __post_init__(self):
         if isinstance(self.function_call, dict):
@@ -127,12 +138,17 @@ class AssistantMessage:
 
     def to_base_message(self) -> BaseMessage:
         if self.function_call is None:
-            return BaseMessage(role=Role.ASSISTANT, content=self.content)
+            return BaseMessage(
+                role=Role.ASSISTANT, content=self.content, timestamp=self.timestamp
+            )
 
         f_call = asdict(self.function_call)
         f_call["arguments"] = json.dumps(f_call["arguments"])
         return BaseMessage(
-            role=Role.ASSISTANT, content=self.content, function_call=f_call
+            role=Role.ASSISTANT,
+            content=self.content,
+            function_call=f_call,
+            timestamp=self.timestamp,
         )
 
 
@@ -140,6 +156,7 @@ class AssistantMessage:
 class FunctionMessage:
     content: str
     name: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -147,7 +164,12 @@ class FunctionMessage:
         return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
 
     def to_base_message(self) -> BaseMessage:
-        return BaseMessage(role=Role.FUNCTION, name=self.name, content=self.content)
+        return BaseMessage(
+            role=Role.FUNCTION,
+            name=self.name,
+            content=self.content,
+            timestamp=self.timestamp,
+        )
 
 
 Message = SystemMessage | UserMessage | AssistantMessage | FunctionMessage
