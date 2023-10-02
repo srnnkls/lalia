@@ -15,10 +15,25 @@ class Error:
 
 
 @dataclass
+class Result:
+    """
+    An anonymous result type that wraps a result or an error.
+    """
+
+    result: Any | None = None
+    error: Error | None = None
+    finish_reason: FinishReason = FinishReason.DELEGATE
+
+
+@dataclass
 class FunctionCallResult:
+    """
+    A result type that is a superset of `Result` containg additional metadata.
+    """
+
     name: str
     parameters: dict[str, Any]
-    result: dict[str, Any] | None = None
+    result: Any | None = None
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.DELEGATE
 
@@ -94,6 +109,15 @@ def execute_function_call(
     if isinstance(results, FunctionCallResult):
         return results
 
+    if isinstance(results, Result):
+        return FunctionCallResult(
+            name=func.__name__,
+            parameters=arguments,
+            result=results.result,
+            error=results.error,
+            finish_reason=results.finish_reason,
+        )
+
     if isinstance(results, str) and results.startswith("Error:"):
         return FunctionCallResult(
             name=func.__name__,
@@ -105,5 +129,5 @@ def execute_function_call(
     return FunctionCallResult(
         name=func.__name__,
         parameters=arguments,
-        result={"result": results},
+        result=results,
     )

@@ -17,11 +17,12 @@ from cobi.utils.db.shopware import (
     extract_columns,
     extract_unified_all_foreign_keys,
     find_paths_both_directions,
-    to_dinsql,
+    to_dinsql_compact,
     to_fdw_view_representation,
 )
 from lalia.chat.messages import AssistantMessage
 from lalia.chat.session import Session
+from lalia.functions import Error, Result
 from lalia.llm.openai import ChatModel, OpenAIChat
 
 yaml = YAML(typ="string")
@@ -50,7 +51,7 @@ tables = extract_columns(schema_fdw)
 unified_foreign_keys = extract_unified_all_foreign_keys(schema_fdw)
 
 schema_din_sql = "\n".join(
-    line for group in to_dinsql(tables, unified_foreign_keys) for line in group
+    line for group in to_dinsql_compact(tables, unified_foreign_keys) for line in group
 )
 
 conn = psycopg.connect(DB_URI)
@@ -66,7 +67,7 @@ def sql_db_pre_select_tables(
             """
         ),
     ]
-) -> str:
+) -> Result:
     """
     Receives a list cotaining the join path with all tables in the right order for
     the query and returns the schema for a given set of tables.
@@ -78,9 +79,15 @@ def sql_db_pre_select_tables(
 
     # if set(join_path) not in [set(path) for path in all_paths]:
     if join_path not in all_paths and list(reversed(join_path)) not in all_paths:
-        return (
-            "Error: The given join_path is not valid. "
-            "Remember to put tables in right order!"
+        # return (
+        #     "Error: The given join_path is not valid. "
+        #     "Remember to put tables in right order!"
+        #     )
+        return Result(
+            error=Error(
+                "The given join_path is not valid. "
+                "Remember to put tables in right order!"
+            ),
         )
 
     columns = extract_columns(
@@ -92,12 +99,18 @@ def sql_db_pre_select_tables(
         tables=join_path,
     )
 
-    return "\n".join(
-        line for group in to_dinsql(columns, unified_foreign_keys) for line in group
+    simplified_schema = "\n".join(
+        line
+        for group in to_dinsql_compact(columns, unified_foreign_keys)
+        for line in group
+    )
+
+    return Result(
+        result=simplified_schema,
     )
 
 
-def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> str:
+def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> Result:
     """
     Use this function to check a SQL query before executing it.
 
@@ -116,7 +129,10 @@ def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> str:
     try:
         parsed_query = parse_sql(query, dialect="postgres")
     except ValueError as e:
-        return f"Error: Syntax error. {e}"
+        # return f"Error: Syntax error. {e}"
+        return Result(
+            error=Error(f"Syntax error. {e}"),
+        )
     else:
 
         def escape_keywords(relation: str) -> str:
@@ -128,10 +144,13 @@ def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> str:
             mutate_relations(parsed_query=parsed_query, func=escape_keywords)
         )
     formatted_query = sqlparse.format(corrected, reindent=True, keyword_case="upper")
-    return template.format(formatted_query=formatted_query)
+    # return template.format(formatted_query=formatted_query)
+    return Result(
+        result=template.format(formatted_query=formatted_query),
+    )
 
 
-def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> str:
+def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> Result:
     """
     Function to query Postgres database with a provided SQL query. The SQL dialect is
     PostgreSQL.
@@ -143,9 +162,16 @@ def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> 
     """
     try:
         with psycopg.connect(DB_URI) as conn:
-            return str(conn.execute(query).fetchall())  # type: ignore
+            # return str(conn.execute(query).fetchall())  # type: ignore
+            return Result(
+                result=conn.execute(query).fetchall(),  # type: ignore
+            )
+
     except psycopg.Error as e:
-        return f"Error: Query failed with {e}. Please adjust the query and try again."
+        # return f"Error: Query failed with {e}. Please adjust the query and try again."
+        return Result(
+            error=Error(f"Query failed with {e}. Please adjust the query."),
+        )
 
 
 SYSTEM_TEMPLATE = cleandoc(
@@ -187,7 +213,7 @@ session = Session(
             )
         ),
     ],
-    functions={sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query},
+    functions=[sql_db_pre_select_tables, sql_db_check_query, sql_db_execute_query],
     autocommit=False,
     debug=True,
 )
@@ -217,13 +243,14 @@ def run_query(input_: str):
     result = session(input_)
     total_tokens = get_tokens_used_for_last_call(session.llm._responses)
     print(result.content)
-    print(
-        f"Total costs: {total_tokens / 1000 * MODEL_COST_PER_1K_TOKENS[session.llm.model]}"
-    )
+    total_costs = total_tokens / 1000 * MODEL_COST_PER_1K_TOKENS[session.llm.model]
+    print(f"Total costs: {total_costs:.2f} USD for {total_tokens} tokens ")
 
 
 run_query("List the names of all products ordered by Tony Fischer.")
 run_query("Can you include the product's price?")
-run_query("List the 10 most expensive products.")
+run_query(
+    "List the 10 most expensive products of the 'Garden, Industrial & Jewelry' category."
+)
 run_query("Where does Annie Toy live?")
 run_query("Please give me the street and the city.")
