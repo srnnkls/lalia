@@ -3,9 +3,8 @@ from collections.abc import Callable
 from types import BuiltinFunctionType, FunctionType
 from typing import Annotated, Any, get_origin, get_type_hints
 
-from pydantic import ValidationError, validate_call
+from pydantic import TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
-from pydantic.json_schema import GenerateJsonSchema, model_json_schema
 
 
 @dataclass
@@ -50,9 +49,8 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
     else:
         raise ValueError(f"Not a callable: {callable_}")
 
-    schema_generator = GenerateJsonSchema()
-    pydantic_model = validate_call(func)
-    pydantic_schema = schema_generator.generate(pydantic_model.__pydantic_core_schema__)
+    adapter = TypeAdapter(validate_call(func))
+    func_schema = adapter.json_schema()
 
     schema = {
         "name": name,
@@ -62,7 +60,7 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 
     schema["parameters"]["properties"] = {
         param: data
-        for param, data in pydantic_schema["properties"].items()
+        for param, data in func_schema["properties"].items()
         if param in parameters
     }
 
@@ -72,7 +70,7 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
             data["description"] = next(iter(annotation.__metadata__), "")
 
     schema["required"] = [
-        name for name in pydantic_schema["required"] if name in parameters
+        name for name in func_schema["required"] if name in parameters
     ]
 
     return schema
@@ -81,16 +79,15 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 def execute_function_call(
     func: Callable[..., Any], arguments: dict[str, Any]
 ) -> FunctionCallResult:
-    validator = validate_call(func).__pydantic_validator__
+    wrapped = validate_call(func)
     try:
-        validator.validate_python(arguments)
-    except ValidationError as e:
+        results = wrapped(**arguments)
+    except (TypeError, ValidationError) as e:
         return FunctionCallResult(
             name=func.__name__,
             parameters=arguments,
-            error=Error(f"Invalid arguments. Please check the function signature: {e}"),
+            error=Error(f"Invalid arguments. Please check the provided arguments: {e}"),
         )
-    results = func(**arguments)
     if isinstance(results, FunctionCallResult):
         return results
 

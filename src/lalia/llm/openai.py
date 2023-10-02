@@ -7,7 +7,7 @@ from pprint import pprint
 from typing import Any
 
 import openai
-from pydantic import ConfigDict, ValidationError, validate_call
+from pydantic import ConfigDict, TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
@@ -53,7 +53,7 @@ class OpenAIChat:
     temperature: float = 1.0
     max_retries: int = 5
     debug: bool = False
-    parser: type[Parser] = LLMParser
+    parser: InitVar[Parser | None] = None
 
     failure_messages: list[Message] = field(
         default_factory=lambda: [
@@ -61,9 +61,17 @@ class OpenAIChat:
         ]
     )
 
-    def __post_init__(self, api_key: str):
+    def __post_init__(self, api_key: str, parser: Parser | None):
         self._api_key = api_key
         self._responses: list[dict[str, Any]] = []
+
+        if parser is None:
+            self._parser = LLMParser(
+                llms=[self],
+                debug=self.debug,
+            )
+        else:
+            self._parser = parser
 
     def _complete_failure(self, messages: Sequence[Message]) -> ChatCompletionResponse:
         messages = list(messages)
@@ -77,7 +85,8 @@ class OpenAIChat:
         messages.append(
             SystemMessage(
                 content=(
-                    f"Error: Invalid input: {e} Please try again with valid json as input."
+                    f"Error: Invalid input: {e}. "
+                    "Please try again with valid json as input."
                 )
             )
         )
@@ -87,12 +96,11 @@ class OpenAIChat:
         self, response: dict[str, Any], functions: Iterable[Callable[..., Any]]
     ) -> dict[str, Any]:
         if "function_call" in response["choices"][0]["message"]:
-            parser = self.parser(llms=[self], debug=self.debug)
             name = response["choices"][0]["message"]["function_call"]["name"]
             arguments = response["choices"][0]["message"]["function_call"]["arguments"]
             func = next(iter(func for func in functions if func.__name__ == name))
-            model = validate_call(func)
-            args, _ = parser.parse(arguments, model)
+            adapter = TypeAdapter(validate_call(func))
+            args, _ = self._parser.parse(arguments, adapter)
             response["choices"][0]["message"]["function_call"]["arguments"] = args
             return response
         else:
@@ -160,10 +168,10 @@ class OpenAIChat:
 
         messages = list(messages)
 
-        raw_response = openai.ChatCompletion.create(**params)
+        raw_response = openai.ChatCompletion.create(**params).to_dict()  # type: ignore
 
         if self.debug:
             pprint(raw_response)
-        self._responses.append(raw_response)  # type: ignore
+        self._responses.append(raw_response)
 
-        return raw_response.to_dict()  # type: ignore
+        return raw_response

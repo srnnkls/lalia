@@ -6,9 +6,7 @@ from inspect import cleandoc
 from pprint import pprint
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ValidationError
-from pydantic._internal._validate_call import ValidateCallWrapper
-from pydantic.dataclasses import dataclass
+from pydantic import TypeAdapter, ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
@@ -34,11 +32,19 @@ VALIDATION_FAILURE_DIRECTIVE = cleandoc(
     """
 )
 
+DESERIALIZERS = (
+    (json.loads, json.JSONDecodeError, {"strict": False}),
+    (yaml.load, YAMLError, {}),
+)
 
-def get_model_schema(model: type[BaseModel]) -> dict[str, Any]:
-    schema = model.schema()
+
+def get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
+    """
+    Wrap type adapter's json schema in a function call schema.
+    """
+    schema = adapter.json_schema()
     func_schema = {
-        "name": model.__name__,
+        "name": adapter.validator.title,
         "parameters": {"type": "object", "properties": {}},
     }
 
@@ -52,13 +58,20 @@ def get_model_schema(model: type[BaseModel]) -> dict[str, Any]:
 @runtime_checkable
 class Parser(Protocol):
     def parse(
-        self, payload: str, model: type[BaseModel], messages: Sequence[Message] = ()
+        self, payload: str, adapter: TypeAdapter, messages: Sequence[Message] = ()
     ) -> tuple[dict[str, Any], list[Message]]:
         ...
 
 
 class LLMParser:
-    def __init__(self, llms: Sequence[LLM], max_retries: int = 10, debug: bool = False):
+    deserializers = DESERIALIZERS
+
+    def __init__(
+        self,
+        llms: Sequence[LLM],
+        max_retries: int = 10,
+        debug: bool = False,
+    ):
         self.llms = llms
         self.max_retries = max_retries
         self.debug = debug
@@ -66,7 +79,7 @@ class LLMParser:
     def _complete_invalid_input(
         self,
         payload: str,
-        model: type[BaseModel | ValidateCallWrapper],
+        adapter: TypeAdapter,
         messages: Sequence[dict[str, Any]],
         llm: LLM,
         e: Exception,
@@ -86,12 +99,12 @@ class LLMParser:
                 raise e
         messages = list(messages)
         messages.append(failure_message.to_base_message().to_raw_message())
-        schema = get_model_schema(model)
+        schema = get_func_call_schema(adapter)
 
         response = llm.complete_raw(
             messages,
             functions=[schema],
-            function_call={"name": model.__name__},
+            function_call={"name": adapter.validator.title},
         )
         if self.debug:
             pprint(response)
@@ -100,16 +113,12 @@ class LLMParser:
         return self._handle_choice(choice)
 
     def _deserialize(self, payload: str) -> dict[str, Any]:
-        parsers = (
-            (json.loads, json.JSONDecodeError, {"strict": False}),
-            (yaml.load, YAMLError, {}),
-        )
         errors = {}
-        for parser, error, params in parsers:
+        for deserializer, error, params in self.deserializers:
             try:
-                deserialized = parser(payload, **params)
+                deserialized = deserializer(payload, **params)  # type: ignore
             except error as e:
-                errors[parser.__name__] = e
+                errors[deserializer.__name__] = e
                 continue
             else:
                 return deserialized
@@ -128,7 +137,7 @@ class LLMParser:
     def parse(
         self,
         payload: str,
-        model: type[BaseModel | ValidateCallWrapper],
+        adapter: TypeAdapter,
         messages: Sequence[Message] = (),
     ) -> tuple[dict[str, Any], list[Message]]:
         raw_messages = to_raw_messages(messages)
@@ -136,11 +145,10 @@ class LLMParser:
             for _ in range(self.max_retries):
                 try:
                     obj = self._deserialize(payload)
-                    validator = model.__pydantic_validator__
-                    validator.validate_python(obj)
+                    adapter.validate_python(obj)
                 except (json.JSONDecodeError, YAMLError, ValidationError) as e:
                     payload, message = self._complete_invalid_input(
-                        payload, model, raw_messages, llm, e
+                        payload, adapter, raw_messages, llm, e
                     )
                     if raw_messages:
                         raw_messages[-1] = message
@@ -149,6 +157,6 @@ class LLMParser:
                     continue
 
                 return obj, [
-                    BaseMessage(**raw_message).parse() for raw_message in raw_messages  # type: ignore
+                    BaseMessage(**raw_message).parse() for raw_message in raw_messages
                 ]
         raise ValueError("Unable to parse payload.")
