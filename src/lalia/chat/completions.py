@@ -1,22 +1,13 @@
 from dataclasses import fields
-from enum import StrEnum
 
 from pydantic.dataclasses import dataclass
 
+from lalia.chat.finish_reason import FinishReason
 from lalia.chat.messages import (
     AssistantMessage,
     FunctionMessage,
     SystemMessage,
 )
-
-
-class FinishReason(StrEnum):
-    STOP = "stop"
-    LENGTH = "length"
-    FUNCTION_CALL = "function_call"
-    CONTENT_FILTER = "content_filter"
-    DELEGATE = "delegate"
-    NULL = "null"
 
 
 @dataclass

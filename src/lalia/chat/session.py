@@ -10,7 +10,8 @@ from pydantic.dataclasses import dataclass
 from rich.console import Console
 
 from lalia.chat import dispatchers
-from lalia.chat.completions import Completion, FinishReason
+from lalia.chat.completions import Completion
+from lalia.chat.finish_reason import FinishReason
 from lalia.chat.messages import (
     AssistantMessage,
     FunctionCall,
@@ -20,7 +21,7 @@ from lalia.chat.messages import (
     UserMessage,
 )
 from lalia.chat.messages.buffer import MessageBuffer
-from lalia.functions import Error, execute_function_call
+from lalia.functions import Error, execute_function_call, get_name
 from lalia.llm import LLM
 from lalia.llm.openai import Choice
 
@@ -34,7 +35,7 @@ class Session:
         default_factory=lambda: SystemMessage(content="")
     )
     init_messages: Sequence[Message] = field(default_factory=list)
-    functions: Sequence[Callable[..., Any]] = field(default_factory=set)
+    functions: Sequence[Callable[..., Any]] = ()
     dispatcher: dispatchers.Dispatcher = field(
         default_factory=dispatchers.FunctionsDispatcher
     )
@@ -59,6 +60,9 @@ class Session:
     def __call__(self, user_input: str = "") -> Message:
         try:
             self.messages.add(UserMessage(content=user_input))
+            if self.debug:
+                for message in self.messages:
+                    console.print(message)
             for _ in range(self.max_iterations):
                 assistant_message, finish_reason = self.complete()
                 if finish_reason is FinishReason.STOP:
@@ -121,23 +125,35 @@ class Session:
 
         return completions
 
-    def _handle_exception(self, exception: BaseException):
-        try:
-            self.rollback()
-        except Exception as rollback_exception:
-            raise rollback_exception from exception
-        finally:
-            raise exception
+    def _complete_function_call_error(
+        self,
+        message: SystemMessage,
+    ) -> tuple[list[Message], FinishReason]:
+        """
+        Completes an errornous function call and isolates the error message.
+        """
+        messages = list(self.messages)
+        messages.append(message)
+        response = self.llm.complete(messages, self.functions, n_choices=1)
+        choice, *_ = response.choices
+        return self._handle_choice(choice)
 
     def _handle_choice(self, choice: Choice) -> tuple[list[Message], FinishReason]:
+        if self.debug:
+            console.print(choice.message)
         match choice.message:
             case AssistantMessage(_, FunctionCall(name, arguments)):
-                result_message, finish_reason = self._handle_function_call(
+                result_message_or_error, finish_reason = self._handle_function_call(
                     name, arguments
                 )
+                if isinstance(result_message_or_error, Error):
+                    error_message = SystemMessage(
+                        content=result_message_or_error.message
+                    )
+                    return self._complete_function_call_error(error_message)
                 if finish_reason is FinishReason.DELEGATE:
                     finish_reason = choice.finish_reason
-                return [choice.message, result_message], finish_reason
+                return [choice.message, result_message_or_error], finish_reason
             case AssistantMessage(_, None):
                 return [choice.message], choice.finish_reason
             case AssistantMessage(None, None):
@@ -147,26 +163,36 @@ class Session:
             case _:
                 raise ValueError(f"Unsupported message type: {type(choice.message)}")
 
+    def _handle_exception(self, exception: BaseException):
+        try:
+            self.rollback()
+        except Exception as rollback_exception:
+            raise rollback_exception from exception
+        finally:
+            raise exception
+
     def _handle_function_call(
         self, name: str, arguments: dict[str, Any]
-    ) -> tuple[Message, FinishReason]:
-        function_names = [func.__name__ for func in self.functions]
+    ) -> tuple[Message | Error, FinishReason]:
+        function_names = [get_name(func) for func in self.functions]
         if name in function_names:
-            func = next(func for func in self.functions if func.__name__ == name)
-            results = execute_function_call(func, arguments)
+            func = next(func for func in self.functions if get_name(func) == name)
+            result = execute_function_call(func, arguments)
             if self.debug:
-                console.print(results)
+                console.print(result)
 
-            match results.result, results.finish_reason, results.error:
-                case result, finish_reason, None:
+            match result.value, result.finish_reason, result.error:
+                case value, finish_reason, None:
                     return (
                         FunctionMessage(
-                            name=name, content=json.dumps(result, indent=2)
+                            name=name,
+                            content=json.dumps(value, indent=2, default=str),
+                            result=result,
                         ),
                         finish_reason,
                     )
-                case None, finish_reason, Error(message),:
-                    return SystemMessage(content=f"Error: {message}"), finish_reason
+                case None, finish_reason, error:
+                    return error, finish_reason
                 case _:
                     raise ValueError("Either `error` or `result` must be `None`")
 

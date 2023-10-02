@@ -6,11 +6,13 @@ from dataclasses import asdict, field
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from lalia.chat.roles import Role
+from lalia.functions import FunctionCallResult
 from lalia.io.models.openai import ChatCompletionResponseMessage
 from lalia.io.renderers import MessageRenderer
 
@@ -26,15 +28,18 @@ class FunctionCall:
     name: str
     arguments: dict[str, Any]
 
-    def __post_init__(self):
-        if isinstance(self.arguments, str):
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def parse_arguments(cls, arguments: str | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(arguments, str):
             try:
-                self.arguments = json.loads(self.arguments, strict=False)
+                return json.loads(arguments, strict=False)
             except json.JSONDecodeError as e:
                 try:
-                    self.arguments = yaml.load(self.arguments)
+                    return yaml.load(arguments)
                 except YAMLError:
                     raise e
+        return arguments
 
 
 @dataclass
@@ -69,7 +74,11 @@ class BaseMessage:
             case Role.FUNCTION:
                 if self.name is None:
                     raise ValueError("FunctionMessages must have a `name` attribute")
-                return FunctionMessage(name=self.name, content=content)
+                return FunctionMessage(
+                    name=self.name,
+                    content=content,
+                    result=FunctionCallResult(name=self.name, parameters={}),
+                )
             case _:
                 raise ValueError(f"Unsupported role: {self.role}")
 
@@ -156,6 +165,7 @@ class AssistantMessage:
 class FunctionMessage:
     content: str
     name: str
+    result: FunctionCallResult
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _repr_mimebundle_(

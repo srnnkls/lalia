@@ -47,11 +47,10 @@ class ConversationRenderer(JupyterMixin):
             table.add_row(*row)
         return table
 
-
     def _format_row(
         self, timestamp: datetime, role: Role, content: str | JSON | None
     ) -> tuple[str, str | JSON] | tuple[str, str, str | JSON]:
-        role_formatted = (f"[{role.color}]{role}[/{role.color}]")
+        role_formatted = f"[{role.color}]{role}[/{role.color}]"
 
         if content is None:
             content = "null"
@@ -63,11 +62,13 @@ class ConversationRenderer(JupyterMixin):
             content_formatted = f"[{role.color}]{content}[/{role.color}]"
 
         if self.include_timestamps:
-            timetamp_formatted = (f"[{role.color}]{timestamp:%H:%M:%S}[/{role.color}]")
+            timetamp_formatted = (
+                f"[{role.color}]{timestamp:%y-%m-%d}\n"
+                f"{timestamp:%H:%M:%S}[/{role.color}]"
+            )
             return timetamp_formatted, role_formatted, content_formatted
         else:
             return role_formatted, content_formatted
-
 
 
 class MessageRenderer(JupyterMixin):

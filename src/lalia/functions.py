@@ -6,7 +6,7 @@ from typing import Annotated, Any, get_origin, get_type_hints
 from pydantic import TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 
-from lalia.chat.completions import FinishReason
+from lalia.chat.finish_reason import FinishReason
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Result:
     An anonymous result type that wraps a result or an error.
     """
 
-    result: Any | None = None
+    value: Any | None = None
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.DELEGATE
 
@@ -33,12 +33,12 @@ class FunctionCallResult:
 
     name: str
     parameters: dict[str, Any]
-    result: Any | None = None
+    value: Any | None = None
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.DELEGATE
 
     def to_string(self) -> str:
-        match self.error, self.result:
+        match self.error, self.value:
             case None, result:
                 return str(result)
             case Error(message), None:
@@ -51,12 +51,24 @@ def is_callable_instance(x):
     return not isinstance(x, FunctionType | BuiltinFunctionType) and callable(x)
 
 
+def get_name(callable_: Callable[..., Any]) -> str:
+    if is_callable_instance(callable_):
+        return getattr(callable_, "name", type(callable_).__name__)
+    return callable_.__name__
+
+
+def get_callable(callable_: Callable[..., Any]) -> Callable[..., Any]:
+    if is_callable_instance(callable_):
+        return callable_.__call__
+    return callable_
+
+
 def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
     if is_callable_instance(callable_):
         func = callable_.__call__
-        name = type(callable_).__name__
+        name = getattr(callable_, "name", type(callable_).__name__)
         doc = func.__doc__ if func.__doc__ else type(callable_).__doc__
-        parameters = dict(list(inspect.signature(func).parameters.items())[1:])
+        parameters = inspect.signature(func).parameters
 
     elif callable(callable_):
         func = callable_
@@ -97,37 +109,37 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 def execute_function_call(
     func: Callable[..., Any], arguments: dict[str, Any]
 ) -> FunctionCallResult:
-    wrapped = validate_call(func)
+    wrapped = validate_call(get_callable(func))
     try:
-        results = wrapped(**arguments)
+        result = wrapped(**arguments)
     except (TypeError, ValidationError) as e:
         return FunctionCallResult(
-            name=func.__name__,
+            name=get_name(func),
             parameters=arguments,
             error=Error(f"Invalid arguments. Please check the provided arguments: {e}"),
         )
-    if isinstance(results, FunctionCallResult):
-        return results
+    if isinstance(result, FunctionCallResult):
+        return result
 
-    if isinstance(results, Result):
+    if isinstance(result, Result):
         return FunctionCallResult(
-            name=func.__name__,
+            name=get_name(func),
             parameters=arguments,
-            result=results.result,
-            error=results.error,
-            finish_reason=results.finish_reason,
+            value=result.value,
+            error=result.error,
+            finish_reason=result.finish_reason,
         )
 
-    if isinstance(results, str) and results.startswith("Error:"):
+    if isinstance(result, str) and result.startswith("Error:"):
         return FunctionCallResult(
-            name=func.__name__,
+            name=get_name(func),
             parameters=arguments,
             error=Error(
-                results.removeprefix("Error:").strip(" "),
+                result.removeprefix("Error:").strip(" "),
             ),
         )
     return FunctionCallResult(
-        name=func.__name__,
+        name=get_name(func),
         parameters=arguments,
-        result=results,
+        value=result,
     )

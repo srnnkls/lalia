@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
 
-from lalia.chat.completions import FinishReason
+from lalia.chat.finish_reason import FinishReason
 from lalia.chat.messages import Message
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDirective

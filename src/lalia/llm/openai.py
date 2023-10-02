@@ -12,7 +12,7 @@ from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
-from lalia.functions import get_schema
+from lalia.functions import get_callable, get_name, get_schema
 from lalia.io.parsers import LLMParser, Parser
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
@@ -98,8 +98,8 @@ class OpenAIChat:
         if "function_call" in response["choices"][0]["message"]:
             name = response["choices"][0]["message"]["function_call"]["name"]
             arguments = response["choices"][0]["message"]["function_call"]["arguments"]
-            func = next(iter(func for func in functions if func.__name__ == name))
-            adapter = TypeAdapter(validate_call(func))
+            func = next(iter(func for func in functions if get_name(func) == name))
+            adapter = TypeAdapter(validate_call(get_callable(func)))
             args, _ = self._parser.parse(arguments, adapter)
             response["choices"][0]["message"]["function_call"]["arguments"] = args
             return response
@@ -171,7 +171,9 @@ class OpenAIChat:
         raw_response = openai.ChatCompletion.create(**params).to_dict()  # type: ignore
 
         if self.debug:
+            pprint(params)
             pprint(raw_response)
+
         self._responses.append(raw_response)
 
         return raw_response

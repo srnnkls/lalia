@@ -105,9 +105,7 @@ def sql_db_pre_select_tables(
         for line in group
     )
 
-    return Result(
-        result=simplified_schema,
-    )
+    return Result(result=simplified_schema)
 
 
 def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> Result:
@@ -145,9 +143,7 @@ def sql_db_check_query(query: Annotated[str, "The SQL query to check."]) -> Resu
         )
     formatted_query = sqlparse.format(corrected, reindent=True, keyword_case="upper")
     # return template.format(formatted_query=formatted_query)
-    return Result(
-        result=template.format(formatted_query=formatted_query),
-    )
+    return Result(result=template.format(formatted_query=formatted_query))
 
 
 def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> Result:
@@ -163,15 +159,11 @@ def sql_db_execute_query(query: Annotated[str, "The SQL query to execute."]) -> 
     try:
         with psycopg.connect(DB_URI) as conn:
             # return str(conn.execute(query).fetchall())  # type: ignore
-            return Result(
-                result=conn.execute(query).fetchall(),  # type: ignore
-            )
+            return Result(result=conn.execute(query).fetchall())  # type: ignore
 
     except psycopg.Error as e:
         # return f"Error: Query failed with {e}. Please adjust the query and try again."
-        return Result(
-            error=Error(f"Query failed with {e}. Please adjust the query."),
-        )
+        return Result(error=Error(f"Query failed with {e}. Please adjust the query."))
 
 
 SYSTEM_TEMPLATE = cleandoc(
