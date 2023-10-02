@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+import json
+from collections.abc import Callable, Sequence
 from dataclasses import field
 from typing import Any
 
@@ -56,79 +57,28 @@ class Session:
         )
 
     def __call__(self, user_input: str = "") -> Message:
-        self.messages.add(UserMessage(content=user_input))
-        for _ in range(self.max_iterations):
-            assistant_message, finish_reason = self.complete()
-            if finish_reason is FinishReason.STOP:
-                self.dispatcher.reset()
-                if self.autocommit:
-                    self.messages.commit()
-                return assistant_message
-        return self._complete_failure()
+        try:
+            self.messages.add(UserMessage(content=user_input))
+            for _ in range(self.max_iterations):
+                assistant_message, finish_reason = self.complete()
+                if finish_reason is FinishReason.STOP:
+                    return assistant_message
+            return self._complete_failure()
+        except (Exception, KeyboardInterrupt) as e:
+            self._handle_exception(e)
+            raise e
 
     def _complete_failure(self, message: Message | None = None) -> Message:
         self.messages.add(message)
         choice, *_ = self.llm._complete_failure(self.messages).choices
-        failure_message, *_ = self._handle_choice(choice)
-        self.messages.rollback()
+        (failure_message, *_), _ = self._handle_choice(choice)
+        self.rollback()
         self.messages.add(failure_message)
         if self.autocommit:
             self.messages.commit()
         return failure_message
 
-    def _handle_choice(self, choice: Choice) -> list[Message]:
-        match choice.message:
-            case AssistantMessage(_, FunctionCall(name, arguments)):
-                result_message = self._handle_function_call(name, arguments)
-                return [choice.message, result_message]
-            case AssistantMessage(_, None):
-                return [choice.message]
-            case AssistantMessage(None, None):
-                self.dispatcher.reset()
-                self.rollback()
-                raise ValueError(
-                    "AssistantMessages without `content` must have a `function_call`"
-                )
-            case _:
-                self.dispatcher.reset()
-                self.rollback()
-                raise ValueError(f"Unsupported message type: {type(choice.message)}")
-
-    def _handle_function_call(self, name: str, arguments: dict[str, Any]) -> Message:
-        function_names = [func.__name__ for func in self.functions]
-        if name in function_names:
-            func = next(func for func in self.functions if func.__name__ == name)
-            results = execute_function_call(func, arguments)
-            if self.debug:
-                console.print(results)
-
-            match results.error, results.result:
-                case None, result:
-                    return FunctionMessage(name=name, content=str(result))
-                case Error(message), None:
-                    return SystemMessage(content=f"Error: {message}")
-                case _:
-                    self.dispatcher.reset()
-                    self.rollback()
-                    raise ValueError("Either `error` or `result` must be `None`")
-
-        return SystemMessage(content=f)
-
-    def _repr_mimebundle_(
-        self, include: Sequence[str], exclude: Sequence[str], **kwargs
-    ) -> dict[str, str]:
-        return self.messages._repr_mimebundle_(include, exclude, **kwargs)
-
-    def add(self, message: Message) -> None:
-        self.messages.add(message)
-
-    def clear(self) -> None:
-        self.messages.clear()
-
-    def complete(self, message: Message | None = None) -> Completion:
-        return next(iter(self.complete_choices(message, n_choices=1)))
-
-    def complete_choices(
+    def _complete_choices(
         self, message: Message | None = None, n_choices=1
     ) -> list[Completion]:
         self.messages.add(message)
@@ -154,28 +104,110 @@ class Session:
         completion_messages = []
 
         for choice in response.choices:
-            completion_messages.extend(self._handle_choice(choice))
-            if dispatcher_finish_reason is FinishReason.DELEGATE:
-                finish_reason = choice.finish_reason
-            else:
+            messages, finish_reason = self._handle_choice(choice)
+            completion_messages.extend(messages)
+
+            if dispatcher_finish_reason is not FinishReason.DELEGATE:
                 finish_reason = dispatcher_finish_reason
+
+            if finish_reason is FinishReason.STOP:
+                if self.autocommit:
+                    self.messages.commit()
+                self.dispatcher.reset()
+
             completions.append(Completion(completion_messages[-1], finish_reason))
 
         self.messages.add_messages(completion_messages)
 
         return completions
 
-    def commit(self) -> None:
+    def _handle_exception(self, exception: BaseException):
+        try:
+            self.rollback()
+        except Exception as rollback_exception:
+            raise rollback_exception from exception
+        finally:
+            raise exception
+
+    def _handle_choice(self, choice: Choice) -> tuple[list[Message], FinishReason]:
+        match choice.message:
+            case AssistantMessage(_, FunctionCall(name, arguments)):
+                result_message, finish_reason = self._handle_function_call(
+                    name, arguments
+                )
+                if finish_reason is FinishReason.DELEGATE:
+                    finish_reason = choice.finish_reason
+                return [choice.message, result_message], finish_reason
+            case AssistantMessage(_, None):
+                return [choice.message], choice.finish_reason
+            case AssistantMessage(None, None):
+                raise ValueError(
+                    "AssistantMessages without `content` must have a `function_call`"
+                )
+            case _:
+                raise ValueError(f"Unsupported message type: {type(choice.message)}")
+
+    def _handle_function_call(
+        self, name: str, arguments: dict[str, Any]
+    ) -> tuple[Message, FinishReason]:
+        function_names = [func.__name__ for func in self.functions]
+        if name in function_names:
+            func = next(func for func in self.functions if func.__name__ == name)
+            results = execute_function_call(func, arguments)
+            if self.debug:
+                console.print(results)
+
+            match results.result, results.finish_reason, results.error:
+                case result, finish_reason, None:
+                    return (
+                        FunctionMessage(
+                            name=name, content=json.dumps(result, indent=2)
+                        ),
+                        finish_reason,
+                    )
+                case None, finish_reason, Error(message),:
+                    return SystemMessage(content=f"Error: {message}"), finish_reason
+                case _:
+                    raise ValueError("Either `error` or `result` must be `None`")
+
+        return (
+            SystemMessage(content=f"Error: Function `{name}` not found."),
+            FinishReason.DELEGATE,
+        )
+
+    def _repr_mimebundle_(
+        self, include: Sequence[str], exclude: Sequence[str], **kwargs
+    ) -> dict[str, str]:
+        return self.messages._repr_mimebundle_(include, exclude, **kwargs)
+
+    def add(self, message: Message):
+        self.messages.add(message)
+
+    def complete(self, message: Message | None = None) -> Completion:
+        return next(iter(self.complete_choices(message, n_choices=1)))
+
+    def complete_choices(
+        self, message: Message | None = None, n_choices=1
+    ) -> list[Completion]:
+        try:
+            return self._complete_choices(message, n_choices)
+        except Exception as e:
+            self._handle_exception(e)
+            raise e
+
+    def commit(self):
         self.messages.commit()
 
-    def reset(self) -> None:
+    def reset(self):
         if isinstance(self.system_message, str):
             self.system_message = SystemMessage(content=self.system_message)
         self.messages.clear()
         self.messages.messages = [self.system_message, *self.init_messages]
+        self.dispatcher.reset()
 
-    def revert(self) -> None:
+    def revert(self):
         self.messages.revert()
 
-    def rollback(self) -> None:
+    def rollback(self):
         self.messages.rollback()
+        self.dispatcher.reset()

@@ -6,6 +6,8 @@ from typing import Annotated, Any, get_origin, get_type_hints
 from pydantic import TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 
+from lalia.chat.completions import FinishReason
+
 
 @dataclass
 class Error:
@@ -18,6 +20,7 @@ class FunctionCallResult:
     parameters: dict[str, Any]
     result: dict[str, Any] | None = None
     error: Error | None = None
+    finish_reason: FinishReason = FinishReason.DELEGATE
 
     def to_string(self) -> str:
         match self.error, self.result:
