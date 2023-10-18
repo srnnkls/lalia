@@ -34,10 +34,8 @@ class LikeMessageBuffer:
             case Tag() | TagPattern():
                 tag_predicate = derive_predicate(tags)
             case dict():
-                key, value = next(iter(tags.items()))
-                tag_predicate = derive_predicate(
-                    TagPattern(key=re.compile(key), value=re.compile(value))
-                )
+                tag_pattern = TagPattern.from_dict(tags)
+                tag_predicate = derive_predicate(tag_pattern)
             case Callable():
                 tag_predicate = tags
             case _:

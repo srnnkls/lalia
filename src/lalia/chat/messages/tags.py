@@ -3,11 +3,14 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import field
-from itertools import chain
+from typing import ClassVar
 
-from pydantic import field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic.dataclasses import dataclass
+
+from lalia.io.renderers import TagColor, TagRenderer
+
+GROUP_COLORS_BY_KEY = True
 
 
 def derive_predicate(operand: Tag | TagPattern) -> Callable[[set[Tag]], bool]:
@@ -38,7 +41,7 @@ class _PredicateOperator(ABC):
 
     @abstractmethod
     def __call__(self, tags: set[Tag]) -> bool:
-        raise NotImplementedError
+        ...
 
     def __and__(self, other: _PredicateOperator | Tag) -> _And:
         match other:
@@ -75,6 +78,31 @@ class _Or(_PredicateOperator):
 class Tag:
     key: str
     value: str
+    color: TagColor | None = Field(validate_default=True, default=None)
+
+    group_colors_by_key: ClassVar[bool] = GROUP_COLORS_BY_KEY
+
+    @field_validator("color", mode="before")
+    @classmethod
+    def set_color(cls, color: TagColor, info: ValidationInfo) -> TagColor:
+        key = info.data["key"]
+
+        if color is None:
+            color = TagRenderer.get_color(key)
+
+        if cls.group_colors_by_key:
+            cls.register_key_color(key, color)
+
+        return color
+
+    @classmethod
+    def from_dict(cls, tag: dict[str, str]) -> Tag:
+        key, value = next(iter(tag.items()))
+        return cls(key=key, value=value)
+
+    @classmethod
+    def register_key_color(cls, key: str, color: TagColor):
+        TagRenderer.register_key(key, color)
 
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
@@ -103,6 +131,13 @@ class Tag:
 class TagPattern:
     key: re.Pattern
     value: re.Pattern
+
+    @classmethod
+    def from_dict(
+        cls, tag: dict[str, str] | dict[re.Pattern, re.Pattern]
+    ) -> TagPattern:
+        key, value = next(iter(tag.items()))
+        return cls(key=re.compile(key), value=re.compile(value))
 
     @field_validator("key", "value", mode="before")
     @classmethod

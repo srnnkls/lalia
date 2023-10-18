@@ -11,12 +11,26 @@ from pydantic.dataclasses import dataclass
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from lalia.chat.messages.tags import Tag
 from lalia.chat.roles import Role
 from lalia.functions import FunctionCallResult
 from lalia.io.models.openai import ChatCompletionResponseMessage
 from lalia.io.renderers import MessageRenderer
 
 yaml = YAML(typ="safe")
+
+
+def _parse_tags(
+    tags: list[dict[str, str]] | set[tuple[str, str]] | set[Tag]
+) -> set[Tag]:
+    match tags:
+        case set(tags):
+            return {Tag(*tag) for tag in tags if isinstance(tag, tuple)} | {
+                tag for tag in tags if isinstance(tag, Tag)
+            }
+        case list(dict() as tags_raw):
+            return {Tag.from_dict(tag) for tag in tags_raw}
+    raise ValueError(f"Unsupported type for tags: {type(tags).__name__}")
 
 
 def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
@@ -60,7 +74,7 @@ class BaseMessage:
                 return AssistantMessage(function_call=FunctionCall(**function_call))
             case _:
                 raise ValueError(
-                    "Messages without `content` must be of role `ASSISTANT`"
+                    "Messages without `content` must be of role `assistant`"
                 )
 
     def _parse_content_case(self, content: str) -> Message:
@@ -102,6 +116,14 @@ class BaseMessage:
 class SystemMessage:
     content: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    tags: set[Tag] = field(default_factory=set)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(
+        cls, tags: list[dict[str, str]] | set[tuple[str, str]] | set[Tag]
+    ) -> set[Tag]:
+        return _parse_tags(tags)
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -118,6 +140,14 @@ class SystemMessage:
 class UserMessage:
     content: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    tags: set[Tag] = field(default_factory=set)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(
+        cls, tags: list[dict[str, str]] | set[tuple[str, str]] | set[Tag]
+    ) -> set[Tag]:
+        return _parse_tags(tags)
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -135,10 +165,21 @@ class AssistantMessage:
     content: str | None = None
     function_call: FunctionCall | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    tags: set[Tag] = field(default_factory=set)
 
-    def __post_init__(self):
-        if isinstance(self.function_call, dict):
-            self.function_call = FunctionCall(**self.function_call)
+    @field_validator("function_call", mode="before")
+    @classmethod
+    def _parse_function_call(cls, function_call: dict[str, Any]) -> FunctionCall:
+        if isinstance(function_call, dict):
+            return FunctionCall(**function_call)
+        return function_call
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(
+        cls, tags: list[dict[str, str]] | set[tuple[str, str]] | set[Tag]
+    ) -> set[Tag]:
+        return _parse_tags(tags)
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -167,6 +208,12 @@ class FunctionMessage:
     name: str
     result: FunctionCallResult
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    tags: set[Tag] = field(default_factory=set)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(cls, tags: list[dict[str, str]] | set[Tag]) -> set[Tag]:
+        return _parse_tags(tags)
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
