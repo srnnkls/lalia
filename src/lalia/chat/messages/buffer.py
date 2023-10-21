@@ -6,7 +6,6 @@ from dataclasses import field
 from enum import Enum
 from itertools import chain
 
-from pydantic import validate_call
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 
@@ -65,7 +64,7 @@ class Folds:
     )
 
     def __post_init__(self):
-        self._fold_predicates: list[Fold] = [self._default_fold_predicate]
+        self._folds: list[Fold] = [self._default_folds]
 
     @classmethod
     def from_messages(
@@ -91,7 +90,7 @@ class Folds:
         )
 
     @property
-    def _default_fold_predicate(self) -> Fold:
+    def _default_folds(self) -> Fold:
         return Fold(
             predicate=_derive_tag_predicate(self.default_fold_tags),
             state=FoldState.FOLDED,
@@ -136,7 +135,7 @@ class Folds:
         return next(
             (
                 fold.state
-                for fold in reversed(self._fold_predicates)
+                for fold in reversed(self._folds)
                 if fold.predicate(message.tags)
             ),
             FoldState.UNFOLDED,
@@ -154,13 +153,13 @@ class Folds:
         pending: Sequence[Message],
     ):
         if tags is None:
-            self._fold_predicates = [self._default_fold_predicate]
+            self._folds = [self._default_folds]
         else:
-            fold_predicate = Fold(
+            fold = Fold(
                 predicate=_derive_tag_predicate(tags),
                 state=FoldState.FOLDED,
             )
-            self._fold_predicates.append(fold_predicate)
+            self._folds.append(fold)
 
         self.update(messages, pending)
 
@@ -183,16 +182,16 @@ class Folds:
         pending: Sequence[Message],
     ):
         if tags is None:
-            self._fold_predicates = [self._default_fold_predicate]
+            self._folds = [self._default_folds]
         else:
-            unfold_predicate = Fold(
+            unfold = Fold(
                 predicate=_derive_tag_predicate(tags),
                 state=FoldState.UNFOLDED,
             )
-            if ~unfold_predicate in self._fold_predicates:
-                self._fold_predicates.remove(~unfold_predicate)
+            if ~unfold in self._folds:
+                self._folds.remove(~unfold)
             else:
-                self._fold_predicates.append(unfold_predicate)
+                self._folds.append(unfold)
 
         self.update(messages, pending)
 
