@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import ClassVar
+from collections.abc import Callable, Iterator
+from typing import ClassVar, cast
 
-from pydantic import Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, validate_call
 from pydantic.dataclasses import dataclass
 
 from lalia.io.renderers import TagColor, TagRenderer
@@ -13,31 +13,61 @@ from lalia.io.renderers import TagColor, TagRenderer
 GROUP_COLORS_BY_KEY = True
 
 
-def derive_predicate(operand: Tag | TagPattern) -> Callable[[set[Tag]], bool]:
-    match operand:
-        case Tag() as tag:
-            return lambda tags: tag in tags
-        case TagPattern(key=key, value=re.Pattern() as pattern):
-            return lambda tags: any(
-                key.match(tag.key) and pattern.match(tag.value)
-                if isinstance(tag.value, str)
-                else False
-                for tag in tags
-            )
-        case TagPattern(key=key, value=TagPattern() as tag_pattern):
-            predicate = derive_predicate(tag_pattern)
-            return lambda tags: any(
-                key.match(tag.key) and predicate({tag.value})
-                if isinstance(tag.value, Tag)
-                else False
-                for tag in tags
-            )
-    raise TypeError(f"No predicate defined for: '{type(operand)}'")
+class PredicateRegistry:
+    _predicates: ClassVar[dict[Tag | TagPattern, Callable[[set[Tag]], bool]]] = {}
+
+    def register_predicate(
+        self,
+        tag: Tag | TagPattern,
+        predicate: Callable[[set[Tag]], bool],
+    ) -> Callable[[set[Tag]], bool]:
+        if tag not in self._predicates:
+            self._predicates[tag] = predicate
+        return self._predicates[tag]
+
+    def deregister_predicate(self, tag: Tag | TagPattern):
+        if tag in self._predicates:
+            self._predicates.pop(tag)
+
+    def derive_predicate(self, operand: Tag | TagPattern) -> Callable[[set[Tag]], bool]:
+        """
+        A higher-order function that returns a predicate function for a given
+        operand. The returned predicate function takes a set of tags and returns
+        True if the operand matches any of the tags in the set.
+        """
+        match operand:
+            case Tag() as tag:
+
+                def is_in_tags(tags: set[Tag]) -> bool:
+                    return tag in tags
+
+                return self.register_predicate(tag, is_in_tags)
+            case TagPattern(
+                key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
+            ) as tag_pattern:
+
+                def matches_any_tag(tags: set[Tag]) -> bool:
+                    return any(
+                        key_pattern.match(tag.key) and value_pattern.match(tag.value)
+                        for tag in tags
+                    )
+
+                return self.register_predicate(tag_pattern, matches_any_tag)
+
+        raise TypeError(f"No predicate defined for: '{type(operand)}'")
+
+
+predicate_registry = PredicateRegistry()
 
 
 class _PredicateOperator(ABC):
     def __init__(self, *predicates: Callable[[set[Tag]], bool]):
         self.predicates = predicates
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _PredicateOperator):
+            return NotImplemented
+        return set(self.predicates) == set(other.predicates)
 
     @abstractmethod
     def __call__(self, tags: set[Tag]) -> bool:
@@ -46,7 +76,7 @@ class _PredicateOperator(ABC):
     def __and__(self, other: _PredicateOperator | Tag) -> _And:
         match other:
             case Tag():
-                return _And(self, derive_predicate(other))
+                return _And(self, predicate_registry.derive_predicate(other))
             case _PredicateOperator():
                 return _And(self, other)
         raise TypeError(
@@ -56,7 +86,7 @@ class _PredicateOperator(ABC):
     def __or__(self, other: _PredicateOperator | Tag) -> _Or:
         match other:
             case Tag():
-                return _Or(self, derive_predicate(other))
+                return _Or(self, predicate_registry.derive_predicate(other))
             case _PredicateOperator():
                 return _Or(self, other)
         raise TypeError(
@@ -82,6 +112,9 @@ class Tag:
 
     group_colors_by_key: ClassVar[bool] = GROUP_COLORS_BY_KEY
 
+    def __iter__(self) -> Iterator[str]:
+        yield from (self.key, self.value)
+
     @field_validator("color", mode="before")
     @classmethod
     def set_color(cls, color: TagColor, info: ValidationInfo) -> TagColor:
@@ -101,15 +134,19 @@ class Tag:
         return cls(key=key, value=value)
 
     @classmethod
+    @validate_call
     def register_key_color(cls, key: str, color: TagColor):
         TagRenderer.register_key(key, color)
 
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
             case _PredicateOperator():
-                return _And(derive_predicate(self), other)
+                return _And(predicate_registry.derive_predicate(self), other)
             case Tag() | TagPattern():
-                return _And(derive_predicate(self), derive_predicate(other))
+                return _And(
+                    predicate_registry.derive_predicate(self),
+                    predicate_registry.derive_predicate(other),
+                )
         raise TypeError(
             f"Unsupported operand type(s) for &: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
@@ -118,9 +155,12 @@ class Tag:
     def __or__(self, other: Tag | TagPattern | _PredicateOperator) -> _Or:
         match other:
             case _PredicateOperator():
-                return _Or(derive_predicate(self), other)
+                return _Or(predicate_registry.derive_predicate(self), other)
             case Tag() | TagPattern():
-                return _Or(derive_predicate(self), derive_predicate(other))
+                return _Or(
+                    predicate_registry.derive_predicate(self),
+                    predicate_registry.derive_predicate(other),
+                )
         raise TypeError(
             f"Unsupported operand type(s) for |: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
@@ -129,8 +169,11 @@ class Tag:
 
 @dataclass(frozen=True)
 class TagPattern:
-    key: re.Pattern
-    value: re.Pattern
+    key: re.Pattern | str
+    value: re.Pattern | str
+
+    def __iter__(self) -> Iterator[re.Pattern]:
+        yield from (cast(re.Pattern, self.key), cast(re.Pattern, self.value))
 
     @classmethod
     def from_dict(
@@ -149,9 +192,12 @@ class TagPattern:
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
             case _PredicateOperator():
-                return _And(derive_predicate(self), other)
+                return _And(predicate_registry.derive_predicate(self), other)
             case Tag() | TagPattern():
-                return _And(derive_predicate(self), derive_predicate(other))
+                return _And(
+                    predicate_registry.derive_predicate(self),
+                    predicate_registry.derive_predicate(other),
+                )
         raise TypeError(
             f"Unsupported operand type(s) for &: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
@@ -160,9 +206,12 @@ class TagPattern:
     def __or__(self, other: Tag | TagPattern | _PredicateOperator) -> _Or:
         match other:
             case _PredicateOperator():
-                return _Or(derive_predicate(self), other)
+                return _Or(predicate_registry.derive_predicate(self), other)
             case Tag() | TagPattern():
-                return _Or(derive_predicate(self), derive_predicate(other))
+                return _Or(
+                    predicate_registry.derive_predicate(self),
+                    predicate_registry.derive_predicate(other),
+                )
         raise TypeError(
             f"Unsupported operand type(s) for |: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
