@@ -8,7 +8,7 @@ from pydantic import validate_call
 from pydantic.dataclasses import dataclass
 from rich import print as pprint
 
-from lalia.chat.messages.tags import Tag, TagPattern, derive_predicate
+from lalia.chat.messages.tags import Tag, TagPattern, predicate_registry
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,6 @@ class LikeMessage:
 class LikeMessageBuffer:
     messages: list[LikeMessage] = field(default_factory=list)
 
-    @validate_call
     def filter(
         self,
         predicate: Callable[[LikeMessage], bool] = lambda message: True,
@@ -32,10 +31,10 @@ class LikeMessageBuffer:
     ) -> LikeMessageBuffer:
         match tags:
             case Tag() | TagPattern():
-                tag_predicate = derive_predicate(tags)
+                tag_predicate = predicate_registry.derive_predicate(tags)
             case dict():
                 tag_pattern = TagPattern.from_dict(tags)
-                tag_predicate = derive_predicate(tag_pattern)
+                tag_predicate = predicate_registry.derive_predicate(tag_pattern)
             case Callable():
                 tag_predicate = tags
             case _:

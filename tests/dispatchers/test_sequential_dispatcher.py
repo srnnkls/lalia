@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages import SystemMessage, UserMessage
-from lalia.chat.completions import FinishReason
 from collections import deque
 
-from cobi.utils.auth.secrets import get_openai_token
+from lalia.chat.completions import FinishReason
 from lalia.chat.dispatchers import DispatchCall
+from lalia.chat.messages import SystemMessage, UserMessage
+from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.messages import UserMessage
 from lalia.chat.session import Session
 from lalia.llm.openai import ChatModel, FunctionCallDirective, OpenAIChat
@@ -95,20 +94,27 @@ def third(third_step: str) -> str:
     return third_step
 
 
-bar_tender = Session(
-    llm=OpenAIChat(
-        model=ChatModel.GPT_3_5_TURBO_0613,
-        api_key=get_openai_token(),
-    ),
-    system_message=(
-        "You are a Bartender. Use the provided functions to answer your questions. "
-        "The number of steps should match the number of function calls."
-    ),
-    functions=[first, second, third],
-    autocommit=False,
-    verbose=True,
-    dispatcher=SequentialDispatcher(),
-)
+def test_sequential_dispatcher():
+    bartender = Session(
+        llm=OpenAIChat(
+            model=ChatModel.GPT_3_5_TURBO_0613,
+            api_key="NOT NEEDED",
+        ),
+        system_message=(
+            "You are a bartender. Use the provided functions to answer your questions. "
+            "The number of steps should match the number of function calls."
+        ),
+        functions=[first, second, third],
+        autocommit=False,
+        verbose=True,
+        dispatcher=SequentialDispatcher(),
+    )
+    bartender.add(UserMessage("I want a Gin Fizz."))
 
-bar_tender("How to prepare a Gin Fizz?")
-bar_tender("How to prepare a Vesper Martini?")
+    for func in bartender.functions:
+        dispatch_call = bartender.dispatcher.dispatch(bartender)
+        assert dispatch_call.params["function_call"]["name"] == func.__name__
+
+    bartender.add(UserMessage("I want a Vesper Martini."))
+    dispatch_call = bartender.dispatcher.dispatch(bartender)
+    assert dispatch_call.params["function_call"] == FunctionCallDirective.NONE

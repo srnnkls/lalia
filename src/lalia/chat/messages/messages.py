@@ -14,7 +14,7 @@ from ruamel.yaml.error import YAMLError
 from lalia.chat.messages.tags import Tag
 from lalia.chat.roles import Role
 from lalia.functions import FunctionCallResult
-from lalia.io.models.openai import ChatCompletionResponseMessage
+from lalia.io.models.openai import ChatCompletionRequestMessage
 from lalia.io.renderers import MessageRenderer
 
 yaml = YAML(typ="safe")
@@ -107,7 +107,7 @@ class BaseMessage:
         return {
             key: value
             for key, value in asdict(self).items()
-            if key in set(ChatCompletionResponseMessage.model_fields) | {"name"}
+            if key in set(ChatCompletionRequestMessage.model_fields)
             and (value is not None or key == "content")
         }
 

@@ -9,1236 +9,1235 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, conint, constr
 
-
-class Error(BaseModel):
-    type: str
-    message: str
-    param: str
-    code: str
-
-
-class ErrorResponse(BaseModel):
-    error: Error
+# class Error(BaseModel):
+#     type: str
+#     message: str
+#     param: str
+#     code: str
 
 
-class DeleteModelResponse(BaseModel):
-    id: str
-    object: str
-    deleted: bool
+# class ErrorResponse(BaseModel):
+#     error: Error
 
 
-class ModelEnum(Enum):
-    babbage_002 = 'babbage-002'
-    davinci_002 = 'davinci-002'
-    gpt_3_5_turbo_instruct = 'gpt-3.5-turbo-instruct'
-    text_davinci_003 = 'text-davinci-003'
-    text_davinci_002 = 'text-davinci-002'
-    text_davinci_001 = 'text-davinci-001'
-    code_davinci_002 = 'code-davinci-002'
-    text_curie_001 = 'text-curie-001'
-    text_babbage_001 = 'text-babbage-001'
-    text_ada_001 = 'text-ada-001'
+# class DeleteModelResponse(BaseModel):
+#     id: str
+#     object: str
+#     deleted: bool
 
 
-class PromptItem(RootModel[List[Any]]):
-    root: List[Any]
+# class ModelEnum(Enum):
+#     babbage_002 = "babbage-002"
+#     davinci_002 = "davinci-002"
+#     gpt_3_5_turbo_instruct = "gpt-3.5-turbo-instruct"
+#     text_davinci_003 = "text-davinci-003"
+#     text_davinci_002 = "text-davinci-002"
+#     text_davinci_001 = "text-davinci-001"
+#     code_davinci_002 = "code-davinci-002"
+#     text_curie_001 = "text-curie-001"
+#     text_babbage_001 = "text-babbage-001"
+#     text_ada_001 = "text-ada-001"
 
 
-class CreateCompletionRequest(BaseModel):
-    model: Union[str, ModelEnum] = Field(
-        ...,
-        description='ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.\n',
-    )
-    prompt: Union[str, List[str], List[int], List[PromptItem]] = Field(
-        ...,
-        description='The prompt(s) to generate completions for, encoded as a string, array of strings, array of tokens, or array of token arrays.\n\nNote that <|endoftext|> is the document separator that the model sees during training, so if a prompt is not specified the model will generate as if from the beginning of a new document.\n',
-    )
-    suffix: Optional[str] = Field(
-        None,
-        description='The suffix that comes after a completion of inserted text.',
-        example='test.',
-    )
-    max_tokens: Optional[conint(ge=0)] = Field(
-        16,
-        description="The maximum number of [tokens](/tokenizer) to generate in the completion.\n\nThe token count of your prompt plus `max_tokens` cannot exceed the model's context length. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n",
-        example=16,
-    )
-    temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
-        1,
-        description='What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n',
-        example=1,
-    )
-    top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
-        1,
-        description='An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n',
-        example=1,
-    )
-    n: Optional[conint(ge=1, le=128)] = Field(
-        1,
-        description='How many completions to generate for each prompt.\n\n**Note:** Because this parameter generates many completions, it can quickly consume your token quota. Use carefully and ensure that you have reasonable settings for `max_tokens` and `stop`.\n',
-        example=1,
-    )
-    stream: Optional[bool] = Field(
-        False,
-        description='Whether to stream back partial progress. If set, tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb).\n',
-    )
-    logprobs: Optional[conint(ge=0, le=5)] = Field(
-        None,
-        description='Include the log probabilities on the `logprobs` most likely tokens, as well the chosen tokens. For example, if `logprobs` is 5, the API will return a list of the 5 most likely tokens. The API will always return the `logprob` of the sampled token, so there may be up to `logprobs+1` elements in the response.\n\nThe maximum value for `logprobs` is 5.\n',
-    )
-    echo: Optional[bool] = Field(
-        False, description='Echo back the prompt in addition to the completion\n'
-    )
-    stop: Optional[Union[str, List[str]]] = Field(
-        None,
-        description='Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.\n',
-    )
-    presence_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
-        0,
-        description="Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
-    )
-    frequency_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
-        0,
-        description="Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
-    )
-    best_of: Optional[conint(ge=0, le=20)] = Field(
-        1,
-        description='Generates `best_of` completions server-side and returns the "best" (the one with the highest log probability per token). Results cannot be streamed.\n\nWhen used with `n`, `best_of` controls the number of candidate completions and `n` specifies how many to return – `best_of` must be greater than `n`.\n\n**Note:** Because this parameter generates many completions, it can quickly consume your token quota. Use carefully and ensure that you have reasonable settings for `max_tokens` and `stop`.\n',
-    )
-    logit_bias: Optional[Dict[str, int]] = Field(
-        None,
-        description='Modify the likelihood of specified tokens appearing in the completion.\n\nAccepts a json object that maps tokens (specified by their token ID in the GPT tokenizer) to an associated bias value from -100 to 100. You can use this [tokenizer tool](/tokenizer?view=bpe) (which works for both GPT-2 and GPT-3) to convert text to token IDs. Mathematically, the bias is added to the logits generated by the model prior to sampling. The exact effect will vary per model, but values between -1 and 1 should decrease or increase likelihood of selection; values like -100 or 100 should result in a ban or exclusive selection of the relevant token.\n\nAs an example, you can pass `{"50256": -100}` to prevent the <|endoftext|> token from being generated.\n',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
+# class PromptItem(RootModel[List[Any]]):
+#     root: List[Any]
 
 
-class Logprobs(BaseModel):
-    tokens: Optional[List[str]] = None
-    token_logprobs: Optional[List[float]] = None
-    top_logprobs: Optional[List[Dict[str, int]]] = None
-    text_offset: Optional[List[int]] = None
+# class CreateCompletionRequest(BaseModel):
+#     model: Union[str, ModelEnum] = Field(
+#         ...,
+#         description="ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.\n",
+#     )
+#     prompt: Union[str, List[str], List[int], List[PromptItem]] = Field(
+#         ...,
+#         description="The prompt(s) to generate completions for, encoded as a string, array of strings, array of tokens, or array of token arrays.\n\nNote that <|endoftext|> is the document separator that the model sees during training, so if a prompt is not specified the model will generate as if from the beginning of a new document.\n",
+#     )
+#     suffix: Optional[str] = Field(
+#         None,
+#         description="The suffix that comes after a completion of inserted text.",
+#         example="test.",
+#     )
+#     max_tokens: Optional[conint(ge=0)] = Field(
+#         16,
+#         description="The maximum number of [tokens](/tokenizer) to generate in the completion.\n\nThe token count of your prompt plus `max_tokens` cannot exceed the model's context length. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n",
+#         example=16,
+#     )
+#     temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
+#         1,
+#         description="What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n",
+#         example=1,
+#     )
+#     top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
+#         1,
+#         description="An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n",
+#         example=1,
+#     )
+#     n: Optional[conint(ge=1, le=128)] = Field(
+#         1,
+#         description="How many completions to generate for each prompt.\n\n**Note:** Because this parameter generates many completions, it can quickly consume your token quota. Use carefully and ensure that you have reasonable settings for `max_tokens` and `stop`.\n",
+#         example=1,
+#     )
+#     stream: Optional[bool] = Field(
+#         False,
+#         description="Whether to stream back partial progress. If set, tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb).\n",
+#     )
+#     logprobs: Optional[conint(ge=0, le=5)] = Field(
+#         None,
+#         description="Include the log probabilities on the `logprobs` most likely tokens, as well the chosen tokens. For example, if `logprobs` is 5, the API will return a list of the 5 most likely tokens. The API will always return the `logprob` of the sampled token, so there may be up to `logprobs+1` elements in the response.\n\nThe maximum value for `logprobs` is 5.\n",
+#     )
+#     echo: Optional[bool] = Field(
+#         False, description="Echo back the prompt in addition to the completion\n"
+#     )
+#     stop: Optional[Union[str, List[str]]] = Field(
+#         None,
+#         description="Up to 4 sequences where the API will stop generating further tokens. The returned text will not contain the stop sequence.\n",
+#     )
+#     presence_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
+#         0,
+#         description="Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
+#     )
+#     frequency_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
+#         0,
+#         description="Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
+#     )
+#     best_of: Optional[conint(ge=0, le=20)] = Field(
+#         1,
+#         description='Generates `best_of` completions server-side and returns the "best" (the one with the highest log probability per token). Results cannot be streamed.\n\nWhen used with `n`, `best_of` controls the number of candidate completions and `n` specifies how many to return – `best_of` must be greater than `n`.\n\n**Note:** Because this parameter generates many completions, it can quickly consume your token quota. Use carefully and ensure that you have reasonable settings for `max_tokens` and `stop`.\n',
+#     )
+#     logit_bias: Optional[Dict[str, int]] = Field(
+#         None,
+#         description='Modify the likelihood of specified tokens appearing in the completion.\n\nAccepts a json object that maps tokens (specified by their token ID in the GPT tokenizer) to an associated bias value from -100 to 100. You can use this [tokenizer tool](/tokenizer?view=bpe) (which works for both GPT-2 and GPT-3) to convert text to token IDs. Mathematically, the bias is added to the logits generated by the model prior to sampling. The exact effect will vary per model, but values between -1 and 1 should decrease or increase likelihood of selection; values like -100 or 100 should result in a ban or exclusive selection of the relevant token.\n\nAs an example, you can pass `{"50256": -100}` to prevent the <|endoftext|> token from being generated.\n',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description="A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n",
+#         example="user-1234",
+#     )
 
 
-class FinishReason(Enum):
-    stop = 'stop'
-    length = 'length'
-    content_filter = 'content_filter'
+# class Logprobs(BaseModel):
+#     tokens: Optional[List[str]] = None
+#     token_logprobs: Optional[List[float]] = None
+#     top_logprobs: Optional[List[Dict[str, int]]] = None
+#     text_offset: Optional[List[int]] = None
 
 
-class Choice(BaseModel):
-    text: str
-    index: int
-    logprobs: Logprobs
-    finish_reason: FinishReason = Field(
-        ...,
-        description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\nor `content_filter` if content was omitted due to a flag from our content filters.\n',
-    )
+# class FinishReason(Enum):
+#     stop = "stop"
+#     length = "length"
+#     content_filter = "content_filter"
+
+
+# class Choice(BaseModel):
+#     text: str
+#     index: int
+#     logprobs: Logprobs
+#     finish_reason: FinishReason = Field(
+#         ...,
+#         description="The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\nor `content_filter` if content was omitted due to a flag from our content filters.\n",
+#     )
 
 
 class Role(Enum):
-    system = 'system'
-    user = 'user'
-    assistant = 'assistant'
-    function = 'function'
+    system = "system"
+    user = "user"
+    assistant = "assistant"
+    function = "function"
 
 
 class FunctionCall(BaseModel):
-    name: str = Field(..., description='The name of the function to call.')
+    name: str = Field(..., description="The name of the function to call.")
     arguments: str = Field(
         ...,
-        description='The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.',
+        description="The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.",
     )
 
 
 class ChatCompletionRequestMessage(BaseModel):
     role: Role = Field(
         ...,
-        description='The role of the messages author. One of `system`, `user`, `assistant`, or `function`.',
+        description="The role of the messages author. One of `system`, `user`, `assistant`, or `function`.",
     )
     content: str = Field(
         ...,
-        description='The contents of the message. `content` is required for all messages, and may be null for assistant messages with function calls.',
+        description="The contents of the message. `content` is required for all messages, and may be null for assistant messages with function calls.",
     )
     name: Optional[str] = Field(
         None,
-        description='The name of the author of this message. `name` is required if role is `function`, and it should be the name of the function whose response is in the `content`. May contain a-z, A-Z, 0-9, and underscores, with a maximum length of 64 characters.',
+        description="The name of the author of this message. `name` is required if role is `function`, and it should be the name of the function whose response is in the `content`. May contain a-z, A-Z, 0-9, and underscores, with a maximum length of 64 characters.",
     )
     function_call: Optional[FunctionCall] = Field(
         None,
-        description='The name and arguments of a function that should be called, as generated by the model.',
-    )
-
-
-class ChatCompletionFunctionParameters(BaseModel):
-    pass
-    model_config = ConfigDict(
-        extra='allow',
-    )
-
-
-class ChatCompletionFunctions(BaseModel):
-    name: str = Field(
-        ...,
-        description='The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.',
-    )
-    description: Optional[str] = Field(
-        None,
-        description='A description of what the function does, used by the model to choose when and how to call the function.',
-    )
-    parameters: ChatCompletionFunctionParameters
-
-
-class ChatCompletionFunctionCallOption(BaseModel):
-    name: str = Field(..., description='The name of the function to call.')
-
-
-class ChatCompletionResponseMessage(BaseModel):
-    role: Role = Field(..., description='The role of the author of this message.')
-    content: str = Field(..., description='The contents of the message.')
-    function_call: Optional[FunctionCall] = Field(
-        None,
-        description='The name and arguments of a function that should be called, as generated by the model.',
-    )
-
-
-class FunctionCall2(BaseModel):
-    name: Optional[str] = Field(None, description='The name of the function to call.')
-    arguments: Optional[str] = Field(
-        None,
-        description='The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.',
-    )
-
-
-class ChatCompletionStreamResponseDelta(BaseModel):
-    role: Optional[Role] = Field(
-        None, description='The role of the author of this message.'
-    )
-    content: Optional[str] = Field(
-        None, description='The contents of the chunk message.'
-    )
-    function_call: Optional[FunctionCall2] = Field(
-        None,
-        description='The name and arguments of a function that should be called, as generated by the model.',
-    )
-
-
-class ModelEnum1(Enum):
-    gpt_4 = 'gpt-4'
-    gpt_4_0314 = 'gpt-4-0314'
-    gpt_4_0613 = 'gpt-4-0613'
-    gpt_4_32k = 'gpt-4-32k'
-    gpt_4_32k_0314 = 'gpt-4-32k-0314'
-    gpt_4_32k_0613 = 'gpt-4-32k-0613'
-    gpt_3_5_turbo = 'gpt-3.5-turbo'
-    gpt_3_5_turbo_16k = 'gpt-3.5-turbo-16k'
-    gpt_3_5_turbo_0301 = 'gpt-3.5-turbo-0301'
-    gpt_3_5_turbo_0613 = 'gpt-3.5-turbo-0613'
-    gpt_3_5_turbo_16k_0613 = 'gpt-3.5-turbo-16k-0613'
-
-
-class FunctionCallEnum(Enum):
-    none = 'none'
-    auto = 'auto'
-
-
-class CreateChatCompletionRequest(BaseModel):
-    model: Union[str, ModelEnum1] = Field(
-        ...,
-        description='ID of the model to use. See the [model endpoint compatibility](/docs/models/model-endpoint-compatibility) table for details on which models work with the Chat API.',
-        example='gpt-3.5-turbo',
-    )
-    messages: List[ChatCompletionRequestMessage] = Field(
-        ...,
-        description='A list of messages comprising the conversation so far. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_format_inputs_to_ChatGPT_models.ipynb).',
-        min_length=1,
-    )
-    functions: Optional[List[ChatCompletionFunctions]] = Field(
-        None,
-        description='A list of functions the model may generate JSON inputs for.',
-        max_length=128,
-        min_length=1,
-    )
-    function_call: Optional[
-        Union[FunctionCallEnum, ChatCompletionFunctionCallOption]
-    ] = Field(
-        None,
-        description='Controls how the model responds to function calls. `none` means the model does not call a function, and responds to the end-user. `auto` means the model can pick between an end-user or calling a function.  Specifying a particular function via `{"name": "my_function"}` forces the model to call that function. `none` is the default when no functions are present. `auto` is the default if functions are present.',
-    )
-    temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
-        1,
-        description='What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n',
-        example=1,
-    )
-    top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
-        1,
-        description='An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n',
-        example=1,
-    )
-    n: Optional[conint(ge=1, le=128)] = Field(
-        1,
-        description='How many chat completion choices to generate for each input message.',
-        example=1,
-    )
-    stream: Optional[bool] = Field(
-        False,
-        description='If set, partial message deltas will be sent, like in ChatGPT. Tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb).\n',
-    )
-    stop: Optional[Union[str, List[str]]] = Field(
-        None,
-        description='Up to 4 sequences where the API will stop generating further tokens.\n',
-    )
-    max_tokens: Optional[int] = Field(
-        'inf',
-        description="The maximum number of [tokens](/tokenizer) to generate in the chat completion.\n\nThe total length of input tokens and generated tokens is limited by the model's context length. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n",
-    )
-    presence_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
-        0,
-        description="Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
-    )
-    frequency_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
-        0,
-        description="Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
-    )
-    logit_bias: Optional[Dict[str, int]] = Field(
-        None,
-        description='Modify the likelihood of specified tokens appearing in the completion.\n\nAccepts a json object that maps tokens (specified by their token ID in the tokenizer) to an associated bias value from -100 to 100. Mathematically, the bias is added to the logits generated by the model prior to sampling. The exact effect will vary per model, but values between -1 and 1 should decrease or increase likelihood of selection; values like -100 or 100 should result in a ban or exclusive selection of the relevant token.\n',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
-
-
-class FinishReason1(Enum):
-    stop = 'stop'
-    length = 'length'
-    function_call = 'function_call'
-    content_filter = 'content_filter'
-
-
-class Choice1(BaseModel):
-    index: int = Field(
-        ..., description='The index of the choice in the list of choices.'
-    )
-    message: ChatCompletionResponseMessage
-    finish_reason: FinishReason1 = Field(
-        ...,
-        description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\n`content_filter` if content was omitted due to a flag from our content filters,\nor `function_call` if the model called a function.\n',
-    )
-
-
-class Choice2(BaseModel):
-    index: int = Field(
-        ..., description='The index of the choice in the list of choices.'
-    )
-    delta: ChatCompletionStreamResponseDelta
-    finish_reason: FinishReason1 = Field(
-        ...,
-        description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\n`content_filter` if content was omitted due to a flag from our content filters,\nor `function_call` if the model called a function.\n',
-    )
-
-
-class CreateChatCompletionStreamResponse(BaseModel):
-    id: str = Field(
-        ..., description='A unique identifier for the chat completion chunk.'
-    )
-    object: str = Field(
-        ..., description='The object type, which is always `chat.completion.chunk`.'
-    )
-    created: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) of when the chat completion chunk was created.',
-    )
-    model: str = Field(..., description='The model to generate the completion.')
-    choices: List[Choice2] = Field(
-        ...,
-        description='A list of chat completion choices. Can be more than one if `n` is greater than 1.',
-    )
-
-
-class ModelEnum2(Enum):
-    text_davinci_edit_001 = 'text-davinci-edit-001'
-    code_davinci_edit_001 = 'code-davinci-edit-001'
-
-
-class CreateEditRequest(BaseModel):
-    model: Union[str, ModelEnum2] = Field(
-        ...,
-        description='ID of the model to use. You can use the `text-davinci-edit-001` or `code-davinci-edit-001` model with this endpoint.',
-        example='text-davinci-edit-001',
-    )
-    input: Optional[str] = Field(
-        '',
-        description='The input text to use as a starting point for the edit.',
-        example='What day of the wek is it?',
-    )
-    instruction: str = Field(
-        ...,
-        description='The instruction that tells the model how to edit the prompt.',
-        example='Fix the spelling mistakes.',
-    )
-    n: Optional[conint(ge=1, le=20)] = Field(
-        1,
-        description='How many edits to generate for the input and instruction.',
-        example=1,
-    )
-    temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
-        1,
-        description='What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n',
-        example=1,
-    )
-    top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
-        1,
-        description='An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n',
-        example=1,
-    )
-
-
-class FinishReason3(Enum):
-    stop = 'stop'
-    length = 'length'
-
-
-class Choice3(BaseModel):
-    text: str = Field(..., description='The edited result.')
-    index: int = Field(
-        ..., description='The index of the choice in the list of choices.'
-    )
-    finish_reason: FinishReason3 = Field(
-        ...,
-        description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\nor `content_filter` if content was omitted due to a flag from our content filters.\n',
-    )
-
-
-class Size(Enum):
-    field_256x256 = '256x256'
-    field_512x512 = '512x512'
-    field_1024x1024 = '1024x1024'
-
-
-class ResponseFormat(Enum):
-    url = 'url'
-    b64_json = 'b64_json'
-
-
-class CreateImageRequest(BaseModel):
-    prompt: str = Field(
-        ...,
-        description='A text description of the desired image(s). The maximum length is 1000 characters.',
-        example='A cute baby sea otter',
-    )
-    n: Optional[conint(ge=1, le=10)] = Field(
-        1,
-        description='The number of images to generate. Must be between 1 and 10.',
-        example=1,
-    )
-    size: Optional[Size] = Field(
-        '1024x1024',
-        description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
-        example='1024x1024',
-    )
-    response_format: Optional[ResponseFormat] = Field(
-        'url',
-        description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
-        example='url',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
-
-
-class Image(BaseModel):
-    url: Optional[str] = Field(
-        None,
-        description='The URL of the generated image, if `response_format` is `url` (default).',
-    )
-    b64_json: Optional[str] = Field(
-        None,
-        description='The base64-encoded JSON of the generated image, if `response_format` is `b64_json`.',
-    )
-
-
-class CreateImageEditRequest(BaseModel):
-    image: bytes = Field(
-        ...,
-        description='The image to edit. Must be a valid PNG file, less than 4MB, and square. If mask is not provided, image must have transparency, which will be used as the mask.',
-    )
-    mask: Optional[bytes] = Field(
-        None,
-        description='An additional image whose fully transparent areas (e.g. where alpha is zero) indicate where `image` should be edited. Must be a valid PNG file, less than 4MB, and have the same dimensions as `image`.',
-    )
-    prompt: str = Field(
-        ...,
-        description='A text description of the desired image(s). The maximum length is 1000 characters.',
-        example='A cute baby sea otter wearing a beret',
-    )
-    n: Optional[conint(ge=1, le=10)] = Field(
-        1,
-        description='The number of images to generate. Must be between 1 and 10.',
-        example=1,
-    )
-    size: Optional[Size] = Field(
-        '1024x1024',
-        description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
-        example='1024x1024',
-    )
-    response_format: Optional[ResponseFormat] = Field(
-        'url',
-        description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
-        example='url',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
-
-
-class CreateImageVariationRequest(BaseModel):
-    image: bytes = Field(
-        ...,
-        description='The image to use as the basis for the variation(s). Must be a valid PNG file, less than 4MB, and square.',
-    )
-    n: Optional[conint(ge=1, le=10)] = Field(
-        1,
-        description='The number of images to generate. Must be between 1 and 10.',
-        example=1,
-    )
-    size: Optional[Size] = Field(
-        '1024x1024',
-        description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
-        example='1024x1024',
-    )
-    response_format: Optional[ResponseFormat] = Field(
-        'url',
-        description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
-        example='url',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
-
-
-class ModelEnum3(Enum):
-    text_moderation_latest = 'text-moderation-latest'
-    text_moderation_stable = 'text-moderation-stable'
-
-
-class CreateModerationRequest(BaseModel):
-    input: Union[str, List[str]] = Field(..., description='The input text to classify')
-    model: Optional[Union[str, ModelEnum3]] = Field(
-        'text-moderation-latest',
-        description='Two content moderations models are available: `text-moderation-stable` and `text-moderation-latest`.\n\nThe default is `text-moderation-latest` which will be automatically upgraded over time. This ensures you are always using our most accurate model. If you use `text-moderation-stable`, we will provide advanced notice before updating the model. Accuracy of `text-moderation-stable` may be slightly lower than for `text-moderation-latest`.\n',
-        example='text-moderation-stable',
-    )
-
-
-class Categories(BaseModel):
-    hate: bool = Field(
-        ...,
-        description='Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste. Hateful content aimed at non-protected groups (e.g., chess players) is harrassment.',
-    )
-    hate_threatening: bool = Field(
-        ...,
-        alias='hate/threatening',
-        description='Hateful content that also includes violence or serious harm towards the targeted group based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
-    )
-    harassment: bool = Field(
-        ...,
-        description='Content that expresses, incites, or promotes harassing language towards any target.',
-    )
-    harassment_threatening: bool = Field(
-        ...,
-        alias='harassment/threatening',
-        description='Harassment content that also includes violence or serious harm towards any target.',
-    )
-    self_harm: bool = Field(
-        ...,
-        alias='self-harm',
-        description='Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.',
-    )
-    self_harm_intent: bool = Field(
-        ...,
-        alias='self-harm/intent',
-        description='Content where the speaker expresses that they are engaging or intend to engage in acts of self-harm, such as suicide, cutting, and eating disorders.',
-    )
-    self_harm_instructions: bool = Field(
-        ...,
-        alias='self-harm/instructions',
-        description='Content that encourages performing acts of self-harm, such as suicide, cutting, and eating disorders, or that gives instructions or advice on how to commit such acts.',
-    )
-    sexual: bool = Field(
-        ...,
-        description='Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
-    )
-    sexual_minors: bool = Field(
-        ...,
-        alias='sexual/minors',
-        description='Sexual content that includes an individual who is under 18 years old.',
-    )
-    violence: bool = Field(
-        ..., description='Content that depicts death, violence, or physical injury.'
-    )
-    violence_graphic: bool = Field(
-        ...,
-        alias='violence/graphic',
-        description='Content that depicts death, violence, or physical injury in graphic detail.',
-    )
-
-
-class CategoryScores(BaseModel):
-    hate: float = Field(..., description="The score for the category 'hate'.")
-    hate_threatening: float = Field(
-        ...,
-        alias='hate/threatening',
-        description="The score for the category 'hate/threatening'.",
-    )
-    harassment: float = Field(
-        ..., description="The score for the category 'harassment'."
-    )
-    harassment_threatening: float = Field(
-        ...,
-        alias='harassment/threatening',
-        description="The score for the category 'harassment/threatening'.",
-    )
-    self_harm: float = Field(
-        ..., alias='self-harm', description="The score for the category 'self-harm'."
-    )
-    self_harm_intent: float = Field(
-        ...,
-        alias='self-harm/intent',
-        description="The score for the category 'self-harm/intent'.",
-    )
-    self_harm_instructions: float = Field(
-        ...,
-        alias='self-harm/instructions',
-        description="The score for the category 'self-harm/instructions'.",
-    )
-    sexual: float = Field(..., description="The score for the category 'sexual'.")
-    sexual_minors: float = Field(
-        ...,
-        alias='sexual/minors',
-        description="The score for the category 'sexual/minors'.",
-    )
-    violence: float = Field(..., description="The score for the category 'violence'.")
-    violence_graphic: float = Field(
-        ...,
-        alias='violence/graphic',
-        description="The score for the category 'violence/graphic'.",
-    )
-
-
-class Result(BaseModel):
-    flagged: bool = Field(
-        ...,
-        description="Whether the content violates [OpenAI's usage policies](/policies/usage-policies).",
-    )
-    categories: Categories = Field(
-        ...,
-        description='A list of the categories, and whether they are flagged or not.',
-    )
-    category_scores: CategoryScores = Field(
-        ...,
-        description='A list of the categories along with their scores as predicted by model.',
-    )
-
-
-class CreateModerationResponse(BaseModel):
-    id: str = Field(
-        ..., description='The unique identifier for the moderation request.'
-    )
-    model: str = Field(
-        ..., description='The model used to generate the moderation results.'
-    )
-    results: List[Result] = Field(..., description='A list of moderation objects.')
-
-
-class CreateFileRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    file: bytes = Field(
-        ...,
-        description='Name of the [JSON Lines](https://jsonlines.readthedocs.io/en/latest/) file to be uploaded.\n\nIf the `purpose` is set to "fine-tune", the file will be used for fine-tuning.\n',
-    )
-    purpose: str = Field(
-        ...,
-        description='The intended purpose of the uploaded documents.\n\nUse "fine-tune" for [fine-tuning](/docs/api-reference/fine-tuning). This allows us to validate the format of the uploaded file.\n',
-    )
-
-
-class DeleteFileResponse(BaseModel):
-    id: str
-    object: str
-    deleted: bool
-
-
-class ModelEnum4(Enum):
-    babbage_002 = 'babbage-002'
-    davinci_002 = 'davinci-002'
-    gpt_3_5_turbo = 'gpt-3.5-turbo'
-
-
-class NEpoch(Enum):
-    auto = 'auto'
-
-
-class Hyperparameters(BaseModel):
-    n_epochs: Optional[Union[NEpoch, conint(ge=1, le=50)]] = Field(
-        'auto',
-        description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
-    )
-
-
-class CreateFineTuningJobRequest(BaseModel):
-    training_file: str = Field(
-        ...,
-        description='The ID of an uploaded file that contains training data.\n\nSee [upload file](/docs/api-reference/files/upload) for how to upload a file.\n\nYour dataset must be formatted as a JSONL file. Additionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/fine-tuning) for more details.\n',
-        example='file-abc123',
-    )
-    validation_file: Optional[str] = Field(
-        None,
-        description='The ID of an uploaded file that contains validation data.\n\nIf you provide this file, the data is used to generate validation\nmetrics periodically during fine-tuning. These metrics can be viewed in\nthe fine-tuning results file.\nThe same data should not be present in both train and validation files.\n\nYour dataset must be formatted as a JSONL file. You must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/fine-tuning) for more details.\n',
-        example='file-abc123',
-    )
-    model: Union[str, ModelEnum4] = Field(
-        ...,
-        description='The name of the model to fine-tune. You can select one of the\n[supported models](/docs/guides/fine-tuning/what-models-can-be-fine-tuned).\n',
-        example='gpt-3.5-turbo',
-    )
-    hyperparameters: Optional[Hyperparameters] = Field(
-        None, description='The hyperparameters used for the fine-tuning job.'
-    )
-    suffix: Optional[constr(min_length=1, max_length=40)] = Field(
-        None,
-        description='A string of up to 18 characters that will be added to your fine-tuned model name.\n\nFor example, a `suffix` of "custom-model-name" would produce a model name like `ft:gpt-3.5-turbo:openai:custom-model-name:7p4lURel`.\n',
-    )
-
-
-class ModelEnum5(Enum):
-    ada = 'ada'
-    babbage = 'babbage'
-    curie = 'curie'
-    davinci = 'davinci'
-
-
-class CreateFineTuneRequest(BaseModel):
-    training_file: str = Field(
-        ...,
-        description='The ID of an uploaded file that contains training data.\n\nSee [upload file](/docs/api-reference/files/upload) for how to upload a file.\n\nYour dataset must be formatted as a JSONL file, where each training\nexample is a JSON object with the keys "prompt" and "completion".\nAdditionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/legacy-fine-tuning/creating-training-data) for more details.\n',
-        example='file-abc123',
-    )
-    validation_file: Optional[str] = Field(
-        None,
-        description='The ID of an uploaded file that contains validation data.\n\nIf you provide this file, the data is used to generate validation\nmetrics periodically during fine-tuning. These metrics can be viewed in\nthe [fine-tuning results file](/docs/guides/legacy-fine-tuning/analyzing-your-fine-tuned-model).\nYour train and validation data should be mutually exclusive.\n\nYour dataset must be formatted as a JSONL file, where each validation\nexample is a JSON object with the keys "prompt" and "completion".\nAdditionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/legacy-fine-tuning/creating-training-data) for more details.\n',
-        example='file-abc123',
-    )
-    model: Optional[Union[str, ModelEnum5]] = Field(
-        'curie',
-        description='The name of the base model to fine-tune. You can select one of "ada",\n"babbage", "curie", "davinci", or a fine-tuned model created after 2022-04-21 and before 2023-08-22.\nTo learn more about these models, see the\n[Models](/docs/models) documentation.\n',
-        example='curie',
-    )
-    n_epochs: Optional[int] = Field(
-        4,
-        description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
-    )
-    batch_size: Optional[int] = Field(
-        None,
-        description="The batch size to use for training. The batch size is the number of\ntraining examples used to train a single forward and backward pass.\n\nBy default, the batch size will be dynamically configured to be\n~0.2% of the number of examples in the training set, capped at 256 -\nin general, we've found that larger batch sizes tend to work better\nfor larger datasets.\n",
-    )
-    learning_rate_multiplier: Optional[float] = Field(
-        None,
-        description='The learning rate multiplier to use for training.\nThe fine-tuning learning rate is the original learning rate used for\npretraining multiplied by this value.\n\nBy default, the learning rate multiplier is the 0.05, 0.1, or 0.2\ndepending on final `batch_size` (larger learning rates tend to\nperform better with larger batch sizes). We recommend experimenting\nwith values in the range 0.02 to 0.2 to see what produces the best\nresults.\n',
-    )
-    prompt_loss_weight: Optional[float] = Field(
-        0.01,
-        description='The weight to use for loss on the prompt tokens. This controls how\nmuch the model tries to learn to generate the prompt (as compared\nto the completion which always has a weight of 1.0), and can add\na stabilizing effect to training when completions are short.\n\nIf prompts are extremely long (relative to completions), it may make\nsense to reduce this weight so as to avoid over-prioritizing\nlearning the prompt.\n',
-    )
-    compute_classification_metrics: Optional[bool] = Field(
-        False,
-        description='If set, we calculate classification-specific metrics such as accuracy\nand F-1 score using the validation set at the end of every epoch.\nThese metrics can be viewed in the [results file](/docs/guides/legacy-fine-tuning/analyzing-your-fine-tuned-model).\n\nIn order to compute classification metrics, you must provide a\n`validation_file`. Additionally, you must\nspecify `classification_n_classes` for multiclass classification or\n`classification_positive_class` for binary classification.\n',
-    )
-    classification_n_classes: Optional[int] = Field(
-        None,
-        description='The number of classes in a classification task.\n\nThis parameter is required for multiclass classification.\n',
-    )
-    classification_positive_class: Optional[str] = Field(
-        None,
-        description='The positive class in binary classification.\n\nThis parameter is needed to generate precision, recall, and F1\nmetrics when doing binary classification.\n',
-    )
-    classification_betas: Optional[List[float]] = Field(
-        None,
-        description='If this is provided, we calculate F-beta scores at the specified\nbeta values. The F-beta score is a generalization of F-1 score.\nThis is only used for binary classification.\n\nWith a beta of 1 (i.e. the F-1 score), precision and recall are\ngiven the same weight. A larger beta score puts more weight on\nrecall and less on precision. A smaller beta score puts more weight\non precision and less on recall.\n',
-        example=[0.6, 1, 1.5, 2],
-    )
-    suffix: Optional[constr(min_length=1, max_length=40)] = Field(
-        None,
-        description='A string of up to 40 characters that will be added to your fine-tuned model name.\n\nFor example, a `suffix` of "custom-model-name" would produce a model name like `ada:ft-your-org:custom-model-name-2022-02-15-04-21-04`.\n',
-    )
-
-
-class ModelEnum6(Enum):
-    text_embedding_ada_002 = 'text-embedding-ada-002'
-
-
-class InputItem(RootModel[List[Any]]):
-    root: List[Any]
-
-
-class CreateEmbeddingRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    model: Union[str, ModelEnum6] = Field(
-        ...,
-        description='ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.\n',
-        example='text-embedding-ada-002',
-    )
-    input: Union[str, List[str], List[int], List[InputItem]] = Field(
-        ...,
-        description='Input text to embed, encoded as a string or array of tokens. To embed multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed the max input tokens for the model (8191 tokens for `text-embedding-ada-002`) and cannot be an empty string. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n',
-        example='The quick brown fox jumped over the lazy dog',
-    )
-    user: Optional[str] = Field(
-        None,
-        description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
-        example='user-1234',
-    )
-
-
-class Usage(BaseModel):
-    prompt_tokens: int = Field(
-        ..., description='The number of tokens used by the prompt.'
-    )
-    total_tokens: int = Field(
-        ..., description='The total number of tokens used by the request.'
-    )
-
-
-class ModelEnum7(Enum):
-    whisper_1 = 'whisper-1'
-
-
-class ResponseFormat3(Enum):
-    json = 'json'
-    text = 'text'
-    srt = 'srt'
-    verbose_json = 'verbose_json'
-    vtt = 'vtt'
-
-
-class CreateTranscriptionRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    file: bytes = Field(
-        ...,
-        description='The audio file object (not file name) to transcribe, in one of these formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm.\n',
-    )
-    model: Union[str, ModelEnum7] = Field(
-        ...,
-        description='ID of the model to use. Only `whisper-1` is currently available.\n',
-        example='whisper-1',
-    )
-    prompt: Optional[str] = Field(
-        None,
-        description="An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should match the audio language.\n",
-    )
-    response_format: Optional[ResponseFormat3] = Field(
-        'json',
-        description='The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt.\n',
-    )
-    temperature: Optional[float] = Field(
-        0,
-        description='The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit.\n',
-    )
-    language: Optional[str] = Field(
-        None,
-        description='The language of the input audio. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.\n',
-    )
-
-
-class CreateTranscriptionResponse(BaseModel):
-    text: str
-
-
-class CreateTranslationRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    file: bytes = Field(
-        ...,
-        description='The audio file object (not file name) translate, in one of these formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm.\n',
-    )
-    model: Union[str, ModelEnum7] = Field(
-        ...,
-        description='ID of the model to use. Only `whisper-1` is currently available.\n',
-        example='whisper-1',
-    )
-    prompt: Optional[str] = Field(
-        None,
-        description="An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should be in English.\n",
-    )
-    response_format: Optional[str] = Field(
-        'json',
-        description='The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt.\n',
-    )
-    temperature: Optional[float] = Field(
-        0,
-        description='The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit.\n',
-    )
-
-
-class CreateTranslationResponse(BaseModel):
-    text: str
-
-
-class Model(BaseModel):
-    id: str = Field(
-        ...,
-        description='The model identifier, which can be referenced in the API endpoints.',
-    )
-    object: str = Field(..., description='The object type, which is always "model".')
-    created: int = Field(
-        ..., description='The Unix timestamp (in seconds) when the model was created.'
-    )
-    owned_by: str = Field(..., description='The organization that owns the model.')
-
-
-class OpenAIFile(BaseModel):
-    id: str = Field(
-        ...,
-        description='The file identifier, which can be referenced in the API endpoints.',
-    )
-    object: str = Field(..., description='The object type, which is always "file".')
-    bytes: int = Field(..., description='The size of the file in bytes.')
-    created_at: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) for when the file was created.',
-    )
-    filename: str = Field(..., description='The name of the file.')
-    purpose: str = Field(
-        ...,
-        description='The intended purpose of the file. Currently, only "fine-tune" is supported.',
-    )
-    status: Optional[str] = Field(
-        None,
-        description='The current status of the file, which can be either `uploaded`, `processed`, `pending`, `error`, `deleting` or `deleted`.',
-    )
-    status_details: Optional[str] = Field(
-        None,
-        description='Additional details about the status of the file. If the file is in the `error` state, this will include a message describing the error.\n',
-    )
-
-
-class Embedding(BaseModel):
-    index: int = Field(
-        ..., description='The index of the embedding in the list of embeddings.'
-    )
-    object: str = Field(
-        ..., description='The object type, which is always "embedding".'
-    )
-    embedding: List[float] = Field(
-        ...,
-        description='The embedding vector, which is a list of floats. The length of vector depends on the model as listed in the [embedding guide](/docs/guides/embeddings).\n',
-    )
-
-
-class Hyperparameters1(BaseModel):
-    n_epochs: Union[NEpoch, conint(ge=1, le=50)] = Field(
-        ...,
-        description='The number of epochs to train the model for. An epoch refers to one full cycle through the training dataset.\n"auto" decides the optimal number of epochs based on the size of the dataset. If setting the number manually, we support any number between 1 and 50 epochs.',
-    )
-
-
-class Error1(BaseModel):
-    message: str = Field(..., description='A human-readable error message.')
-    code: str = Field(..., description='A machine-readable error code.')
-    param: str = Field(
-        ...,
-        description='The parameter that was invalid, usually `training_file` or `validation_file`. This field will be null if the failure was not parameter-specific.',
-    )
-
-
-class FineTuningJob(BaseModel):
-    id: str = Field(
-        ...,
-        description='The object identifier, which can be referenced in the API endpoints.',
-    )
-    object: str = Field(
-        ..., description='The object type, which is always "fine_tuning.job".'
-    )
-    created_at: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) for when the fine-tuning job was created.',
-    )
-    finished_at: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) for when the fine-tuning job was finished. The value will be null if the fine-tuning job is still running.',
-    )
-    model: str = Field(..., description='The base model that is being fine-tuned.')
-    fine_tuned_model: str = Field(
-        ...,
-        description='The name of the fine-tuned model that is being created. The value will be null if the fine-tuning job is still running.',
-    )
-    organization_id: str = Field(
-        ..., description='The organization that owns the fine-tuning job.'
-    )
-    status: str = Field(
-        ...,
-        description='The current status of the fine-tuning job, which can be either `validating_files`, `queued`, `running`, `succeeded`, `failed`, or `cancelled`.',
-    )
-    hyperparameters: Hyperparameters1 = Field(
-        ...,
-        description='The hyperparameters used for the fine-tuning job. See the [fine-tuning guide](/docs/guides/fine-tuning) for more details.',
-    )
-    training_file: str = Field(
-        ...,
-        description='The file ID used for training. You can retrieve the training data with the [Files API](/docs/api-reference/files/retrieve-contents).',
-    )
-    validation_file: str = Field(
-        ...,
-        description='The file ID used for validation. You can retrieve the validation results with the [Files API](/docs/api-reference/files/retrieve-contents).',
-    )
-    result_files: List[str] = Field(
-        ...,
-        description='The compiled results file ID(s) for the fine-tuning job. You can retrieve the results with the [Files API](/docs/api-reference/files/retrieve-contents).',
-    )
-    trained_tokens: int = Field(
-        ...,
-        description='The total number of billable tokens processed by this fine-tuning job. The value will be null if the fine-tuning job is still running.',
-    )
-    error: Error1 = Field(
-        ...,
-        description='For fine-tuning jobs that have `failed`, this will contain more information on the cause of the failure.',
-    )
-
-
-class Datum(Enum):
-    none = 'none'
-    string = 'string'
-
-
-class TypeEnum(Enum):
-    message = 'message'
-    metrics = 'metrics'
-
-
-class FineTuningEvent(BaseModel):
-    object: str
-    created_at: int
-    level: str
-    message: str
-    data: Optional[Datum] = None
-    type: Optional[TypeEnum] = None
-
-
-class Hyperparams(BaseModel):
-    n_epochs: int = Field(
-        ...,
-        description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
-    )
-    batch_size: int = Field(
-        ...,
-        description='The batch size to use for training. The batch size is the number of\ntraining examples used to train a single forward and backward pass.\n',
-    )
-    prompt_loss_weight: float = Field(
-        ..., description='The weight to use for loss on the prompt tokens.\n'
-    )
-    learning_rate_multiplier: float = Field(
-        ..., description='The learning rate multiplier to use for training.\n'
-    )
-    compute_classification_metrics: Optional[bool] = Field(
-        None,
-        description='The classification metrics to compute using the validation dataset at the end of every epoch.\n',
-    )
-    classification_positive_class: Optional[str] = Field(
-        None,
-        description='The positive class to use for computing classification metrics.\n',
-    )
-    classification_n_classes: Optional[int] = Field(
-        None,
-        description='The number of classes to use for computing classification metrics.\n',
-    )
-
-
-class Level(Enum):
-    info = 'info'
-    warn = 'warn'
-    error = 'error'
-
-
-class FineTuningJobEvent(BaseModel):
-    id: str
-    object: str
-    created_at: int
-    level: Level
-    message: str
-
-
-class FineTuneEvent(BaseModel):
-    object: str
-    created_at: int
-    level: str
-    message: str
-
-
-class CompletionUsage(BaseModel):
-    prompt_tokens: int = Field(..., description='Number of tokens in the prompt.')
-    completion_tokens: int = Field(
-        ..., description='Number of tokens in the generated completion.'
-    )
-    total_tokens: int = Field(
-        ...,
-        description='Total number of tokens used in the request (prompt + completion).',
-    )
-
-
-class ListModelsResponse(BaseModel):
-    object: str
-    data: List[Model]
-
-
-class CreateCompletionResponse(BaseModel):
-    id: str = Field(..., description='A unique identifier for the completion.')
-    object: str = Field(
-        ..., description='The object type, which is always "text_completion"'
-    )
-    created: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) of when the completion was created.',
-    )
-    model: str = Field(..., description='The model used for completion.')
-    choices: List[Choice] = Field(
-        ...,
-        description='The list of completion choices the model generated for the input prompt.',
-    )
-    usage: Optional[CompletionUsage] = None
-
-
-class CreateChatCompletionResponse(BaseModel):
-    id: str = Field(..., description='A unique identifier for the chat completion.')
-    object: str = Field(
-        ..., description='The object type, which is always `chat.completion`.'
-    )
-    created: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) of when the chat completion was created.',
-    )
-    model: str = Field(..., description='The model used for the chat completion.')
-    choices: List[Choice1] = Field(
-        ...,
-        description='A list of chat completion choices. Can be more than one if `n` is greater than 1.',
-    )
-    usage: Optional[CompletionUsage] = None
-
-
-class ListPaginatedFineTuningJobsResponse(BaseModel):
-    object: str
-    data: List[FineTuningJob]
-    has_more: bool
-
-
-class CreateEditResponse(BaseModel):
-    object: str = Field(..., description='The object type, which is always `edit`.')
-    created: int = Field(
-        ..., description='The Unix timestamp (in seconds) of when the edit was created.'
-    )
-    choices: List[Choice3] = Field(
-        ...,
-        description='A list of edit choices. Can be more than one if `n` is greater than 1.',
-    )
-    usage: CompletionUsage
-
-
-class ImagesResponse(BaseModel):
-    created: int
-    data: List[Image]
-
-
-class ListFilesResponse(BaseModel):
-    object: str
-    data: List[OpenAIFile]
-
-
-class ListFineTuningJobEventsResponse(BaseModel):
-    object: str
-    data: List[FineTuningJobEvent]
-
-
-class ListFineTuneEventsResponse(BaseModel):
-    object: str
-    data: List[FineTuneEvent]
-
-
-class CreateEmbeddingResponse(BaseModel):
-    object: str = Field(
-        ..., description='The object type, which is always "embedding".'
-    )
-    model: str = Field(
-        ..., description='The name of the model used to generate the embedding.'
-    )
-    data: List[Embedding] = Field(
-        ..., description='The list of embeddings generated by the model.'
-    )
-    usage: Usage = Field(..., description='The usage information for the request.')
-
-
-class FineTune(BaseModel):
-    id: str = Field(
-        ...,
-        description='The object identifier, which can be referenced in the API endpoints.',
-    )
-    object: str = Field(
-        ..., description='The object type, which is always "fine-tune".'
-    )
-    created_at: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) for when the fine-tuning job was created.',
-    )
-    updated_at: int = Field(
-        ...,
-        description='The Unix timestamp (in seconds) for when the fine-tuning job was last updated.',
-    )
-    model: str = Field(..., description='The base model that is being fine-tuned.')
-    fine_tuned_model: str = Field(
-        ..., description='The name of the fine-tuned model that is being created.'
-    )
-    organization_id: str = Field(
-        ..., description='The organization that owns the fine-tuning job.'
-    )
-    status: str = Field(
-        ...,
-        description='The current status of the fine-tuning job, which can be either `created`, `running`, `succeeded`, `failed`, or `cancelled`.',
-    )
-    hyperparams: Hyperparams = Field(
-        ...,
-        description='The hyperparameters used for the fine-tuning job. See the [fine-tuning guide](/docs/guides/legacy-fine-tuning/hyperparameters) for more details.',
-    )
-    training_files: List[OpenAIFile] = Field(
-        ..., description='The list of files used for training.'
-    )
-    validation_files: List[OpenAIFile] = Field(
-        ..., description='The list of files used for validation.'
-    )
-    result_files: List[OpenAIFile] = Field(
-        ..., description='The compiled results files for the fine-tuning job.'
-    )
-    events: Optional[List[FineTuneEvent]] = Field(
-        None,
-        description='The list of events that have been observed in the lifecycle of the FineTune job.',
-    )
-
-
-class ListFineTunesResponse(BaseModel):
-    object: str
-    data: List[FineTune]
+        description="The name and arguments of a function that should be called, as generated by the model.",
+    )
+
+
+# class ChatCompletionFunctionParameters(BaseModel):
+#     pass
+#     model_config = ConfigDict(
+#         extra='allow',
+#     )
+
+
+# class ChatCompletionFunctions(BaseModel):
+#     name: str = Field(
+#         ...,
+#         description='The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.',
+#     )
+#     description: Optional[str] = Field(
+#         None,
+#         description='A description of what the function does, used by the model to choose when and how to call the function.',
+#     )
+#     parameters: ChatCompletionFunctionParameters
+
+
+# class ChatCompletionFunctionCallOption(BaseModel):
+#     name: str = Field(..., description='The name of the function to call.')
+
+
+# class ChatCompletionResponseMessage(BaseModel):
+#     role: Role = Field(..., description='The role of the author of this message.')
+#     content: str = Field(..., description='The contents of the message.')
+#     function_call: Optional[FunctionCall] = Field(
+#         None,
+#         description='The name and arguments of a function that should be called, as generated by the model.',
+#     )
+
+
+# class FunctionCall2(BaseModel):
+#     name: Optional[str] = Field(None, description='The name of the function to call.')
+#     arguments: Optional[str] = Field(
+#         None,
+#         description='The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.',
+#     )
+
+
+# class ChatCompletionStreamResponseDelta(BaseModel):
+#     role: Optional[Role] = Field(
+#         None, description='The role of the author of this message.'
+#     )
+#     content: Optional[str] = Field(
+#         None, description='The contents of the chunk message.'
+#     )
+#     function_call: Optional[FunctionCall2] = Field(
+#         None,
+#         description='The name and arguments of a function that should be called, as generated by the model.',
+#     )
+
+
+# class ModelEnum1(Enum):
+#     gpt_4 = 'gpt-4'
+#     gpt_4_0314 = 'gpt-4-0314'
+#     gpt_4_0613 = 'gpt-4-0613'
+#     gpt_4_32k = 'gpt-4-32k'
+#     gpt_4_32k_0314 = 'gpt-4-32k-0314'
+#     gpt_4_32k_0613 = 'gpt-4-32k-0613'
+#     gpt_3_5_turbo = 'gpt-3.5-turbo'
+#     gpt_3_5_turbo_16k = 'gpt-3.5-turbo-16k'
+#     gpt_3_5_turbo_0301 = 'gpt-3.5-turbo-0301'
+#     gpt_3_5_turbo_0613 = 'gpt-3.5-turbo-0613'
+#     gpt_3_5_turbo_16k_0613 = 'gpt-3.5-turbo-16k-0613'
+
+
+# class FunctionCallEnum(Enum):
+#     none = 'none'
+#     auto = 'auto'
+
+
+# class CreateChatCompletionRequest(BaseModel):
+#     model: Union[str, ModelEnum1] = Field(
+#         ...,
+#         description='ID of the model to use. See the [model endpoint compatibility](/docs/models/model-endpoint-compatibility) table for details on which models work with the Chat API.',
+#         example='gpt-3.5-turbo',
+#     )
+#     messages: List[ChatCompletionRequestMessage] = Field(
+#         ...,
+#         description='A list of messages comprising the conversation so far. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_format_inputs_to_ChatGPT_models.ipynb).',
+#         min_length=1,
+#     )
+#     functions: Optional[List[ChatCompletionFunctions]] = Field(
+#         None,
+#         description='A list of functions the model may generate JSON inputs for.',
+#         max_length=128,
+#         min_length=1,
+#     )
+#     function_call: Optional[
+#         Union[FunctionCallEnum, ChatCompletionFunctionCallOption]
+#     ] = Field(
+#         None,
+#         description='Controls how the model responds to function calls. `none` means the model does not call a function, and responds to the end-user. `auto` means the model can pick between an end-user or calling a function.  Specifying a particular function via `{"name": "my_function"}` forces the model to call that function. `none` is the default when no functions are present. `auto` is the default if functions are present.',
+#     )
+#     temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
+#         1,
+#         description='What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n',
+#         example=1,
+#     )
+#     top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
+#         1,
+#         description='An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n',
+#         example=1,
+#     )
+#     n: Optional[conint(ge=1, le=128)] = Field(
+#         1,
+#         description='How many chat completion choices to generate for each input message.',
+#         example=1,
+#     )
+#     stream: Optional[bool] = Field(
+#         False,
+#         description='If set, partial message deltas will be sent, like in ChatGPT. Tokens will be sent as data-only [server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#Event_stream_format) as they become available, with the stream terminated by a `data: [DONE]` message. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_stream_completions.ipynb).\n',
+#     )
+#     stop: Optional[Union[str, List[str]]] = Field(
+#         None,
+#         description='Up to 4 sequences where the API will stop generating further tokens.\n',
+#     )
+#     max_tokens: Optional[int] = Field(
+#         'inf',
+#         description="The maximum number of [tokens](/tokenizer) to generate in the chat completion.\n\nThe total length of input tokens and generated tokens is limited by the model's context length. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n",
+#     )
+#     presence_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
+#         0,
+#         description="Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
+#     )
+#     frequency_penalty: Optional[confloat(ge=-2.0, le=2.0)] = Field(
+#         0,
+#         description="Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.\n\n[See more information about frequency and presence penalties.](/docs/guides/gpt/parameter-details)\n",
+#     )
+#     logit_bias: Optional[Dict[str, int]] = Field(
+#         None,
+#         description='Modify the likelihood of specified tokens appearing in the completion.\n\nAccepts a json object that maps tokens (specified by their token ID in the tokenizer) to an associated bias value from -100 to 100. Mathematically, the bias is added to the logits generated by the model prior to sampling. The exact effect will vary per model, but values between -1 and 1 should decrease or increase likelihood of selection; values like -100 or 100 should result in a ban or exclusive selection of the relevant token.\n',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
+#         example='user-1234',
+#     )
+
+
+# class FinishReason1(Enum):
+#     stop = 'stop'
+#     length = 'length'
+#     function_call = 'function_call'
+#     content_filter = 'content_filter'
+
+
+# class Choice1(BaseModel):
+#     index: int = Field(
+#         ..., description='The index of the choice in the list of choices.'
+#     )
+#     message: ChatCompletionResponseMessage
+#     finish_reason: FinishReason1 = Field(
+#         ...,
+#         description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\n`content_filter` if content was omitted due to a flag from our content filters,\nor `function_call` if the model called a function.\n',
+#     )
+
+
+# class Choice2(BaseModel):
+#     index: int = Field(
+#         ..., description='The index of the choice in the list of choices.'
+#     )
+#     delta: ChatCompletionStreamResponseDelta
+#     finish_reason: FinishReason1 = Field(
+#         ...,
+#         description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\n`content_filter` if content was omitted due to a flag from our content filters,\nor `function_call` if the model called a function.\n',
+#     )
+
+
+# class CreateChatCompletionStreamResponse(BaseModel):
+#     id: str = Field(
+#         ..., description='A unique identifier for the chat completion chunk.'
+#     )
+#     object: str = Field(
+#         ..., description='The object type, which is always `chat.completion.chunk`.'
+#     )
+#     created: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) of when the chat completion chunk was created.',
+#     )
+#     model: str = Field(..., description='The model to generate the completion.')
+#     choices: List[Choice2] = Field(
+#         ...,
+#         description='A list of chat completion choices. Can be more than one if `n` is greater than 1.',
+#     )
+
+
+# class ModelEnum2(Enum):
+#     text_davinci_edit_001 = 'text-davinci-edit-001'
+#     code_davinci_edit_001 = 'code-davinci-edit-001'
+
+
+# class CreateEditRequest(BaseModel):
+#     model: Union[str, ModelEnum2] = Field(
+#         ...,
+#         description='ID of the model to use. You can use the `text-davinci-edit-001` or `code-davinci-edit-001` model with this endpoint.',
+#         example='text-davinci-edit-001',
+#     )
+#     input: Optional[str] = Field(
+#         '',
+#         description='The input text to use as a starting point for the edit.',
+#         example='What day of the wek is it?',
+#     )
+#     instruction: str = Field(
+#         ...,
+#         description='The instruction that tells the model how to edit the prompt.',
+#         example='Fix the spelling mistakes.',
+#     )
+#     n: Optional[conint(ge=1, le=20)] = Field(
+#         1,
+#         description='How many edits to generate for the input and instruction.',
+#         example=1,
+#     )
+#     temperature: Optional[confloat(ge=0.0, le=2.0)] = Field(
+#         1,
+#         description='What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.\n\nWe generally recommend altering this or `top_p` but not both.\n',
+#         example=1,
+#     )
+#     top_p: Optional[confloat(ge=0.0, le=1.0)] = Field(
+#         1,
+#         description='An alternative to sampling with temperature, called nucleus sampling, where the model considers the results of the tokens with top_p probability mass. So 0.1 means only the tokens comprising the top 10% probability mass are considered.\n\nWe generally recommend altering this or `temperature` but not both.\n',
+#         example=1,
+#     )
+
+
+# class FinishReason3(Enum):
+#     stop = 'stop'
+#     length = 'length'
+
+
+# class Choice3(BaseModel):
+#     text: str = Field(..., description='The edited result.')
+#     index: int = Field(
+#         ..., description='The index of the choice in the list of choices.'
+#     )
+#     finish_reason: FinishReason3 = Field(
+#         ...,
+#         description='The reason the model stopped generating tokens. This will be `stop` if the model hit a natural stop point or a provided stop sequence,\n`length` if the maximum number of tokens specified in the request was reached,\nor `content_filter` if content was omitted due to a flag from our content filters.\n',
+#     )
+
+
+# class Size(Enum):
+#     field_256x256 = '256x256'
+#     field_512x512 = '512x512'
+#     field_1024x1024 = '1024x1024'
+
+
+# class ResponseFormat(Enum):
+#     url = 'url'
+#     b64_json = 'b64_json'
+
+
+# class CreateImageRequest(BaseModel):
+#     prompt: str = Field(
+#         ...,
+#         description='A text description of the desired image(s). The maximum length is 1000 characters.',
+#         example='A cute baby sea otter',
+#     )
+#     n: Optional[conint(ge=1, le=10)] = Field(
+#         1,
+#         description='The number of images to generate. Must be between 1 and 10.',
+#         example=1,
+#     )
+#     size: Optional[Size] = Field(
+#         '1024x1024',
+#         description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
+#         example='1024x1024',
+#     )
+#     response_format: Optional[ResponseFormat] = Field(
+#         'url',
+#         description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
+#         example='url',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
+#         example='user-1234',
+#     )
+
+
+# class Image(BaseModel):
+#     url: Optional[str] = Field(
+#         None,
+#         description='The URL of the generated image, if `response_format` is `url` (default).',
+#     )
+#     b64_json: Optional[str] = Field(
+#         None,
+#         description='The base64-encoded JSON of the generated image, if `response_format` is `b64_json`.',
+#     )
+
+
+# class CreateImageEditRequest(BaseModel):
+#     image: bytes = Field(
+#         ...,
+#         description='The image to edit. Must be a valid PNG file, less than 4MB, and square. If mask is not provided, image must have transparency, which will be used as the mask.',
+#     )
+#     mask: Optional[bytes] = Field(
+#         None,
+#         description='An additional image whose fully transparent areas (e.g. where alpha is zero) indicate where `image` should be edited. Must be a valid PNG file, less than 4MB, and have the same dimensions as `image`.',
+#     )
+#     prompt: str = Field(
+#         ...,
+#         description='A text description of the desired image(s). The maximum length is 1000 characters.',
+#         example='A cute baby sea otter wearing a beret',
+#     )
+#     n: Optional[conint(ge=1, le=10)] = Field(
+#         1,
+#         description='The number of images to generate. Must be between 1 and 10.',
+#         example=1,
+#     )
+#     size: Optional[Size] = Field(
+#         '1024x1024',
+#         description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
+#         example='1024x1024',
+#     )
+#     response_format: Optional[ResponseFormat] = Field(
+#         'url',
+#         description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
+#         example='url',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
+#         example='user-1234',
+#     )
+
+
+# class CreateImageVariationRequest(BaseModel):
+#     image: bytes = Field(
+#         ...,
+#         description='The image to use as the basis for the variation(s). Must be a valid PNG file, less than 4MB, and square.',
+#     )
+#     n: Optional[conint(ge=1, le=10)] = Field(
+#         1,
+#         description='The number of images to generate. Must be between 1 and 10.',
+#         example=1,
+#     )
+#     size: Optional[Size] = Field(
+#         '1024x1024',
+#         description='The size of the generated images. Must be one of `256x256`, `512x512`, or `1024x1024`.',
+#         example='1024x1024',
+#     )
+#     response_format: Optional[ResponseFormat] = Field(
+#         'url',
+#         description='The format in which the generated images are returned. Must be one of `url` or `b64_json`.',
+#         example='url',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
+#         example='user-1234',
+#     )
+
+
+# class ModelEnum3(Enum):
+#     text_moderation_latest = 'text-moderation-latest'
+#     text_moderation_stable = 'text-moderation-stable'
+
+
+# class CreateModerationRequest(BaseModel):
+#     input: Union[str, List[str]] = Field(..., description='The input text to classify')
+#     model: Optional[Union[str, ModelEnum3]] = Field(
+#         'text-moderation-latest',
+#         description='Two content moderations models are available: `text-moderation-stable` and `text-moderation-latest`.\n\nThe default is `text-moderation-latest` which will be automatically upgraded over time. This ensures you are always using our most accurate model. If you use `text-moderation-stable`, we will provide advanced notice before updating the model. Accuracy of `text-moderation-stable` may be slightly lower than for `text-moderation-latest`.\n',
+#         example='text-moderation-stable',
+#     )
+
+
+# class Categories(BaseModel):
+#     hate: bool = Field(
+#         ...,
+#         description='Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste. Hateful content aimed at non-protected groups (e.g., chess players) is harrassment.',
+#     )
+#     hate_threatening: bool = Field(
+#         ...,
+#         alias='hate/threatening',
+#         description='Hateful content that also includes violence or serious harm towards the targeted group based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
+#     )
+#     harassment: bool = Field(
+#         ...,
+#         description='Content that expresses, incites, or promotes harassing language towards any target.',
+#     )
+#     harassment_threatening: bool = Field(
+#         ...,
+#         alias='harassment/threatening',
+#         description='Harassment content that also includes violence or serious harm towards any target.',
+#     )
+#     self_harm: bool = Field(
+#         ...,
+#         alias='self-harm',
+#         description='Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.',
+#     )
+#     self_harm_intent: bool = Field(
+#         ...,
+#         alias='self-harm/intent',
+#         description='Content where the speaker expresses that they are engaging or intend to engage in acts of self-harm, such as suicide, cutting, and eating disorders.',
+#     )
+#     self_harm_instructions: bool = Field(
+#         ...,
+#         alias='self-harm/instructions',
+#         description='Content that encourages performing acts of self-harm, such as suicide, cutting, and eating disorders, or that gives instructions or advice on how to commit such acts.',
+#     )
+#     sexual: bool = Field(
+#         ...,
+#         description='Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
+#     )
+#     sexual_minors: bool = Field(
+#         ...,
+#         alias='sexual/minors',
+#         description='Sexual content that includes an individual who is under 18 years old.',
+#     )
+#     violence: bool = Field(
+#         ..., description='Content that depicts death, violence, or physical injury.'
+#     )
+#     violence_graphic: bool = Field(
+#         ...,
+#         alias='violence/graphic',
+#         description='Content that depicts death, violence, or physical injury in graphic detail.',
+#     )
+
+
+# class CategoryScores(BaseModel):
+#     hate: float = Field(..., description="The score for the category 'hate'.")
+#     hate_threatening: float = Field(
+#         ...,
+#         alias='hate/threatening',
+#         description="The score for the category 'hate/threatening'.",
+#     )
+#     harassment: float = Field(
+#         ..., description="The score for the category 'harassment'."
+#     )
+#     harassment_threatening: float = Field(
+#         ...,
+#         alias='harassment/threatening',
+#         description="The score for the category 'harassment/threatening'.",
+#     )
+#     self_harm: float = Field(
+#         ..., alias='self-harm', description="The score for the category 'self-harm'."
+#     )
+#     self_harm_intent: float = Field(
+#         ...,
+#         alias='self-harm/intent',
+#         description="The score for the category 'self-harm/intent'.",
+#     )
+#     self_harm_instructions: float = Field(
+#         ...,
+#         alias='self-harm/instructions',
+#         description="The score for the category 'self-harm/instructions'.",
+#     )
+#     sexual: float = Field(..., description="The score for the category 'sexual'.")
+#     sexual_minors: float = Field(
+#         ...,
+#         alias='sexual/minors',
+#         description="The score for the category 'sexual/minors'.",
+#     )
+#     violence: float = Field(..., description="The score for the category 'violence'.")
+#     violence_graphic: float = Field(
+#         ...,
+#         alias='violence/graphic',
+#         description="The score for the category 'violence/graphic'.",
+#     )
+
+
+# class Result(BaseModel):
+#     flagged: bool = Field(
+#         ...,
+#         description="Whether the content violates [OpenAI's usage policies](/policies/usage-policies).",
+#     )
+#     categories: Categories = Field(
+#         ...,
+#         description='A list of the categories, and whether they are flagged or not.',
+#     )
+#     category_scores: CategoryScores = Field(
+#         ...,
+#         description='A list of the categories along with their scores as predicted by model.',
+#     )
+
+
+# class CreateModerationResponse(BaseModel):
+#     id: str = Field(
+#         ..., description='The unique identifier for the moderation request.'
+#     )
+#     model: str = Field(
+#         ..., description='The model used to generate the moderation results.'
+#     )
+#     results: List[Result] = Field(..., description='A list of moderation objects.')
+
+
+# class CreateFileRequest(BaseModel):
+#     model_config = ConfigDict(
+#         extra='forbid',
+#     )
+#     file: bytes = Field(
+#         ...,
+#         description='Name of the [JSON Lines](https://jsonlines.readthedocs.io/en/latest/) file to be uploaded.\n\nIf the `purpose` is set to "fine-tune", the file will be used for fine-tuning.\n',
+#     )
+#     purpose: str = Field(
+#         ...,
+#         description='The intended purpose of the uploaded documents.\n\nUse "fine-tune" for [fine-tuning](/docs/api-reference/fine-tuning). This allows us to validate the format of the uploaded file.\n',
+#     )
+
+
+# class DeleteFileResponse(BaseModel):
+#     id: str
+#     object: str
+#     deleted: bool
+
+
+# class ModelEnum4(Enum):
+#     babbage_002 = 'babbage-002'
+#     davinci_002 = 'davinci-002'
+#     gpt_3_5_turbo = 'gpt-3.5-turbo'
+
+
+# class NEpoch(Enum):
+#     auto = 'auto'
+
+
+# class Hyperparameters(BaseModel):
+#     n_epochs: Optional[Union[NEpoch, conint(ge=1, le=50)]] = Field(
+#         'auto',
+#         description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
+#     )
+
+
+# class CreateFineTuningJobRequest(BaseModel):
+#     training_file: str = Field(
+#         ...,
+#         description='The ID of an uploaded file that contains training data.\n\nSee [upload file](/docs/api-reference/files/upload) for how to upload a file.\n\nYour dataset must be formatted as a JSONL file. Additionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/fine-tuning) for more details.\n',
+#         example='file-abc123',
+#     )
+#     validation_file: Optional[str] = Field(
+#         None,
+#         description='The ID of an uploaded file that contains validation data.\n\nIf you provide this file, the data is used to generate validation\nmetrics periodically during fine-tuning. These metrics can be viewed in\nthe fine-tuning results file.\nThe same data should not be present in both train and validation files.\n\nYour dataset must be formatted as a JSONL file. You must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/fine-tuning) for more details.\n',
+#         example='file-abc123',
+#     )
+#     model: Union[str, ModelEnum4] = Field(
+#         ...,
+#         description='The name of the model to fine-tune. You can select one of the\n[supported models](/docs/guides/fine-tuning/what-models-can-be-fine-tuned).\n',
+#         example='gpt-3.5-turbo',
+#     )
+#     hyperparameters: Optional[Hyperparameters] = Field(
+#         None, description='The hyperparameters used for the fine-tuning job.'
+#     )
+#     suffix: Optional[constr(min_length=1, max_length=40)] = Field(
+#         None,
+#         description='A string of up to 18 characters that will be added to your fine-tuned model name.\n\nFor example, a `suffix` of "custom-model-name" would produce a model name like `ft:gpt-3.5-turbo:openai:custom-model-name:7p4lURel`.\n',
+#     )
+
+
+# class ModelEnum5(Enum):
+#     ada = 'ada'
+#     babbage = 'babbage'
+#     curie = 'curie'
+#     davinci = 'davinci'
+
+
+# class CreateFineTuneRequest(BaseModel):
+#     training_file: str = Field(
+#         ...,
+#         description='The ID of an uploaded file that contains training data.\n\nSee [upload file](/docs/api-reference/files/upload) for how to upload a file.\n\nYour dataset must be formatted as a JSONL file, where each training\nexample is a JSON object with the keys "prompt" and "completion".\nAdditionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/legacy-fine-tuning/creating-training-data) for more details.\n',
+#         example='file-abc123',
+#     )
+#     validation_file: Optional[str] = Field(
+#         None,
+#         description='The ID of an uploaded file that contains validation data.\n\nIf you provide this file, the data is used to generate validation\nmetrics periodically during fine-tuning. These metrics can be viewed in\nthe [fine-tuning results file](/docs/guides/legacy-fine-tuning/analyzing-your-fine-tuned-model).\nYour train and validation data should be mutually exclusive.\n\nYour dataset must be formatted as a JSONL file, where each validation\nexample is a JSON object with the keys "prompt" and "completion".\nAdditionally, you must upload your file with the purpose `fine-tune`.\n\nSee the [fine-tuning guide](/docs/guides/legacy-fine-tuning/creating-training-data) for more details.\n',
+#         example='file-abc123',
+#     )
+#     model: Optional[Union[str, ModelEnum5]] = Field(
+#         'curie',
+#         description='The name of the base model to fine-tune. You can select one of "ada",\n"babbage", "curie", "davinci", or a fine-tuned model created after 2022-04-21 and before 2023-08-22.\nTo learn more about these models, see the\n[Models](/docs/models) documentation.\n',
+#         example='curie',
+#     )
+#     n_epochs: Optional[int] = Field(
+#         4,
+#         description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
+#     )
+#     batch_size: Optional[int] = Field(
+#         None,
+#         description="The batch size to use for training. The batch size is the number of\ntraining examples used to train a single forward and backward pass.\n\nBy default, the batch size will be dynamically configured to be\n~0.2% of the number of examples in the training set, capped at 256 -\nin general, we've found that larger batch sizes tend to work better\nfor larger datasets.\n",
+#     )
+#     learning_rate_multiplier: Optional[float] = Field(
+#         None,
+#         description='The learning rate multiplier to use for training.\nThe fine-tuning learning rate is the original learning rate used for\npretraining multiplied by this value.\n\nBy default, the learning rate multiplier is the 0.05, 0.1, or 0.2\ndepending on final `batch_size` (larger learning rates tend to\nperform better with larger batch sizes). We recommend experimenting\nwith values in the range 0.02 to 0.2 to see what produces the best\nresults.\n',
+#     )
+#     prompt_loss_weight: Optional[float] = Field(
+#         0.01,
+#         description='The weight to use for loss on the prompt tokens. This controls how\nmuch the model tries to learn to generate the prompt (as compared\nto the completion which always has a weight of 1.0), and can add\na stabilizing effect to training when completions are short.\n\nIf prompts are extremely long (relative to completions), it may make\nsense to reduce this weight so as to avoid over-prioritizing\nlearning the prompt.\n',
+#     )
+#     compute_classification_metrics: Optional[bool] = Field(
+#         False,
+#         description='If set, we calculate classification-specific metrics such as accuracy\nand F-1 score using the validation set at the end of every epoch.\nThese metrics can be viewed in the [results file](/docs/guides/legacy-fine-tuning/analyzing-your-fine-tuned-model).\n\nIn order to compute classification metrics, you must provide a\n`validation_file`. Additionally, you must\nspecify `classification_n_classes` for multiclass classification or\n`classification_positive_class` for binary classification.\n',
+#     )
+#     classification_n_classes: Optional[int] = Field(
+#         None,
+#         description='The number of classes in a classification task.\n\nThis parameter is required for multiclass classification.\n',
+#     )
+#     classification_positive_class: Optional[str] = Field(
+#         None,
+#         description='The positive class in binary classification.\n\nThis parameter is needed to generate precision, recall, and F1\nmetrics when doing binary classification.\n',
+#     )
+#     classification_betas: Optional[List[float]] = Field(
+#         None,
+#         description='If this is provided, we calculate F-beta scores at the specified\nbeta values. The F-beta score is a generalization of F-1 score.\nThis is only used for binary classification.\n\nWith a beta of 1 (i.e. the F-1 score), precision and recall are\ngiven the same weight. A larger beta score puts more weight on\nrecall and less on precision. A smaller beta score puts more weight\non precision and less on recall.\n',
+#         example=[0.6, 1, 1.5, 2],
+#     )
+#     suffix: Optional[constr(min_length=1, max_length=40)] = Field(
+#         None,
+#         description='A string of up to 40 characters that will be added to your fine-tuned model name.\n\nFor example, a `suffix` of "custom-model-name" would produce a model name like `ada:ft-your-org:custom-model-name-2022-02-15-04-21-04`.\n',
+#     )
+
+
+# class ModelEnum6(Enum):
+#     text_embedding_ada_002 = 'text-embedding-ada-002'
+
+
+# class InputItem(RootModel[List[Any]]):
+#     root: List[Any]
+
+
+# class CreateEmbeddingRequest(BaseModel):
+#     model_config = ConfigDict(
+#         extra='forbid',
+#     )
+#     model: Union[str, ModelEnum6] = Field(
+#         ...,
+#         description='ID of the model to use. You can use the [List models](/docs/api-reference/models/list) API to see all of your available models, or see our [Model overview](/docs/models/overview) for descriptions of them.\n',
+#         example='text-embedding-ada-002',
+#     )
+#     input: Union[str, List[str], List[int], List[InputItem]] = Field(
+#         ...,
+#         description='Input text to embed, encoded as a string or array of tokens. To embed multiple inputs in a single request, pass an array of strings or array of token arrays. Each input must not exceed the max input tokens for the model (8191 tokens for `text-embedding-ada-002`) and cannot be an empty string. [Example Python code](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb) for counting tokens.\n',
+#         example='The quick brown fox jumped over the lazy dog',
+#     )
+#     user: Optional[str] = Field(
+#         None,
+#         description='A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. [Learn more](/docs/guides/safety-best-practices/end-user-ids).\n',
+#         example='user-1234',
+#     )
+
+
+# class Usage(BaseModel):
+#     prompt_tokens: int = Field(
+#         ..., description='The number of tokens used by the prompt.'
+#     )
+#     total_tokens: int = Field(
+#         ..., description='The total number of tokens used by the request.'
+#     )
+
+
+# class ModelEnum7(Enum):
+#     whisper_1 = 'whisper-1'
+
+
+# class ResponseFormat3(Enum):
+#     json = 'json'
+#     text = 'text'
+#     srt = 'srt'
+#     verbose_json = 'verbose_json'
+#     vtt = 'vtt'
+
+
+# class CreateTranscriptionRequest(BaseModel):
+#     model_config = ConfigDict(
+#         extra='forbid',
+#     )
+#     file: bytes = Field(
+#         ...,
+#         description='The audio file object (not file name) to transcribe, in one of these formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm.\n',
+#     )
+#     model: Union[str, ModelEnum7] = Field(
+#         ...,
+#         description='ID of the model to use. Only `whisper-1` is currently available.\n',
+#         example='whisper-1',
+#     )
+#     prompt: Optional[str] = Field(
+#         None,
+#         description="An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should match the audio language.\n",
+#     )
+#     response_format: Optional[ResponseFormat3] = Field(
+#         'json',
+#         description='The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt.\n',
+#     )
+#     temperature: Optional[float] = Field(
+#         0,
+#         description='The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit.\n',
+#     )
+#     language: Optional[str] = Field(
+#         None,
+#         description='The language of the input audio. Supplying the input language in [ISO-639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) format will improve accuracy and latency.\n',
+#     )
+
+
+# class CreateTranscriptionResponse(BaseModel):
+#     text: str
+
+
+# class CreateTranslationRequest(BaseModel):
+#     model_config = ConfigDict(
+#         extra='forbid',
+#     )
+#     file: bytes = Field(
+#         ...,
+#         description='The audio file object (not file name) translate, in one of these formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm.\n',
+#     )
+#     model: Union[str, ModelEnum7] = Field(
+#         ...,
+#         description='ID of the model to use. Only `whisper-1` is currently available.\n',
+#         example='whisper-1',
+#     )
+#     prompt: Optional[str] = Field(
+#         None,
+#         description="An optional text to guide the model's style or continue a previous audio segment. The [prompt](/docs/guides/speech-to-text/prompting) should be in English.\n",
+#     )
+#     response_format: Optional[str] = Field(
+#         'json',
+#         description='The format of the transcript output, in one of these options: json, text, srt, verbose_json, or vtt.\n',
+#     )
+#     temperature: Optional[float] = Field(
+#         0,
+#         description='The sampling temperature, between 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic. If set to 0, the model will use [log probability](https://en.wikipedia.org/wiki/Log_probability) to automatically increase the temperature until certain thresholds are hit.\n',
+#     )
+
+
+# class CreateTranslationResponse(BaseModel):
+#     text: str
+
+
+# class Model(BaseModel):
+#     id: str = Field(
+#         ...,
+#         description='The model identifier, which can be referenced in the API endpoints.',
+#     )
+#     object: str = Field(..., description='The object type, which is always "model".')
+#     created: int = Field(
+#         ..., description='The Unix timestamp (in seconds) when the model was created.'
+#     )
+#     owned_by: str = Field(..., description='The organization that owns the model.')
+
+
+# class OpenAIFile(BaseModel):
+#     id: str = Field(
+#         ...,
+#         description='The file identifier, which can be referenced in the API endpoints.',
+#     )
+#     object: str = Field(..., description='The object type, which is always "file".')
+#     bytes: int = Field(..., description='The size of the file in bytes.')
+#     created_at: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) for when the file was created.',
+#     )
+#     filename: str = Field(..., description='The name of the file.')
+#     purpose: str = Field(
+#         ...,
+#         description='The intended purpose of the file. Currently, only "fine-tune" is supported.',
+#     )
+#     status: Optional[str] = Field(
+#         None,
+#         description='The current status of the file, which can be either `uploaded`, `processed`, `pending`, `error`, `deleting` or `deleted`.',
+#     )
+#     status_details: Optional[str] = Field(
+#         None,
+#         description='Additional details about the status of the file. If the file is in the `error` state, this will include a message describing the error.\n',
+#     )
+
+
+# class Embedding(BaseModel):
+#     index: int = Field(
+#         ..., description='The index of the embedding in the list of embeddings.'
+#     )
+#     object: str = Field(
+#         ..., description='The object type, which is always "embedding".'
+#     )
+#     embedding: List[float] = Field(
+#         ...,
+#         description='The embedding vector, which is a list of floats. The length of vector depends on the model as listed in the [embedding guide](/docs/guides/embeddings).\n',
+#     )
+
+
+# class Hyperparameters1(BaseModel):
+#     n_epochs: Union[NEpoch, conint(ge=1, le=50)] = Field(
+#         ...,
+#         description='The number of epochs to train the model for. An epoch refers to one full cycle through the training dataset.\n"auto" decides the optimal number of epochs based on the size of the dataset. If setting the number manually, we support any number between 1 and 50 epochs.',
+#     )
+
+
+# class Error1(BaseModel):
+#     message: str = Field(..., description='A human-readable error message.')
+#     code: str = Field(..., description='A machine-readable error code.')
+#     param: str = Field(
+#         ...,
+#         description='The parameter that was invalid, usually `training_file` or `validation_file`. This field will be null if the failure was not parameter-specific.',
+#     )
+
+
+# class FineTuningJob(BaseModel):
+#     id: str = Field(
+#         ...,
+#         description='The object identifier, which can be referenced in the API endpoints.',
+#     )
+#     object: str = Field(
+#         ..., description='The object type, which is always "fine_tuning.job".'
+#     )
+#     created_at: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) for when the fine-tuning job was created.',
+#     )
+#     finished_at: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) for when the fine-tuning job was finished. The value will be null if the fine-tuning job is still running.',
+#     )
+#     model: str = Field(..., description='The base model that is being fine-tuned.')
+#     fine_tuned_model: str = Field(
+#         ...,
+#         description='The name of the fine-tuned model that is being created. The value will be null if the fine-tuning job is still running.',
+#     )
+#     organization_id: str = Field(
+#         ..., description='The organization that owns the fine-tuning job.'
+#     )
+#     status: str = Field(
+#         ...,
+#         description='The current status of the fine-tuning job, which can be either `validating_files`, `queued`, `running`, `succeeded`, `failed`, or `cancelled`.',
+#     )
+#     hyperparameters: Hyperparameters1 = Field(
+#         ...,
+#         description='The hyperparameters used for the fine-tuning job. See the [fine-tuning guide](/docs/guides/fine-tuning) for more details.',
+#     )
+#     training_file: str = Field(
+#         ...,
+#         description='The file ID used for training. You can retrieve the training data with the [Files API](/docs/api-reference/files/retrieve-contents).',
+#     )
+#     validation_file: str = Field(
+#         ...,
+#         description='The file ID used for validation. You can retrieve the validation results with the [Files API](/docs/api-reference/files/retrieve-contents).',
+#     )
+#     result_files: List[str] = Field(
+#         ...,
+#         description='The compiled results file ID(s) for the fine-tuning job. You can retrieve the results with the [Files API](/docs/api-reference/files/retrieve-contents).',
+#     )
+#     trained_tokens: int = Field(
+#         ...,
+#         description='The total number of billable tokens processed by this fine-tuning job. The value will be null if the fine-tuning job is still running.',
+#     )
+#     error: Error1 = Field(
+#         ...,
+#         description='For fine-tuning jobs that have `failed`, this will contain more information on the cause of the failure.',
+#     )
+
+
+# class Datum(Enum):
+#     none = 'none'
+#     string = 'string'
+
+
+# class TypeEnum(Enum):
+#     message = 'message'
+#     metrics = 'metrics'
+
+
+# class FineTuningEvent(BaseModel):
+#     object: str
+#     created_at: int
+#     level: str
+#     message: str
+#     data: Optional[Datum] = None
+#     type: Optional[TypeEnum] = None
+
+
+# class Hyperparams(BaseModel):
+#     n_epochs: int = Field(
+#         ...,
+#         description='The number of epochs to train the model for. An epoch refers to one\nfull cycle through the training dataset.\n',
+#     )
+#     batch_size: int = Field(
+#         ...,
+#         description='The batch size to use for training. The batch size is the number of\ntraining examples used to train a single forward and backward pass.\n',
+#     )
+#     prompt_loss_weight: float = Field(
+#         ..., description='The weight to use for loss on the prompt tokens.\n'
+#     )
+#     learning_rate_multiplier: float = Field(
+#         ..., description='The learning rate multiplier to use for training.\n'
+#     )
+#     compute_classification_metrics: Optional[bool] = Field(
+#         None,
+#         description='The classification metrics to compute using the validation dataset at the end of every epoch.\n',
+#     )
+#     classification_positive_class: Optional[str] = Field(
+#         None,
+#         description='The positive class to use for computing classification metrics.\n',
+#     )
+#     classification_n_classes: Optional[int] = Field(
+#         None,
+#         description='The number of classes to use for computing classification metrics.\n',
+#     )
+
+
+# class Level(Enum):
+#     info = 'info'
+#     warn = 'warn'
+#     error = 'error'
+
+
+# class FineTuningJobEvent(BaseModel):
+#     id: str
+#     object: str
+#     created_at: int
+#     level: Level
+#     message: str
+
+
+# class FineTuneEvent(BaseModel):
+#     object: str
+#     created_at: int
+#     level: str
+#     message: str
+
+
+# class CompletionUsage(BaseModel):
+#     prompt_tokens: int = Field(..., description='Number of tokens in the prompt.')
+#     completion_tokens: int = Field(
+#         ..., description='Number of tokens in the generated completion.'
+#     )
+#     total_tokens: int = Field(
+#         ...,
+#         description='Total number of tokens used in the request (prompt + completion).',
+#     )
+
+
+# class ListModelsResponse(BaseModel):
+#     object: str
+#     data: List[Model]
+
+
+# class CreateCompletionResponse(BaseModel):
+#     id: str = Field(..., description='A unique identifier for the completion.')
+#     object: str = Field(
+#         ..., description='The object type, which is always "text_completion"'
+#     )
+#     created: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) of when the completion was created.',
+#     )
+#     model: str = Field(..., description='The model used for completion.')
+#     choices: List[Choice] = Field(
+#         ...,
+#         description='The list of completion choices the model generated for the input prompt.',
+#     )
+#     usage: Optional[CompletionUsage] = None
+
+
+# class CreateChatCompletionResponse(BaseModel):
+#     id: str = Field(..., description='A unique identifier for the chat completion.')
+#     object: str = Field(
+#         ..., description='The object type, which is always `chat.completion`.'
+#     )
+#     created: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) of when the chat completion was created.',
+#     )
+#     model: str = Field(..., description='The model used for the chat completion.')
+#     choices: List[Choice1] = Field(
+#         ...,
+#         description='A list of chat completion choices. Can be more than one if `n` is greater than 1.',
+#     )
+#     usage: Optional[CompletionUsage] = None
+
+
+# class ListPaginatedFineTuningJobsResponse(BaseModel):
+#     object: str
+#     data: List[FineTuningJob]
+#     has_more: bool
+
+
+# class CreateEditResponse(BaseModel):
+#     object: str = Field(..., description='The object type, which is always `edit`.')
+#     created: int = Field(
+#         ..., description='The Unix timestamp (in seconds) of when the edit was created.'
+#     )
+#     choices: List[Choice3] = Field(
+#         ...,
+#         description='A list of edit choices. Can be more than one if `n` is greater than 1.',
+#     )
+#     usage: CompletionUsage
+
+
+# class ImagesResponse(BaseModel):
+#     created: int
+#     data: List[Image]
+
+
+# class ListFilesResponse(BaseModel):
+#     object: str
+#     data: List[OpenAIFile]
+
+
+# class ListFineTuningJobEventsResponse(BaseModel):
+#     object: str
+#     data: List[FineTuningJobEvent]
+
+
+# class ListFineTuneEventsResponse(BaseModel):
+#     object: str
+#     data: List[FineTuneEvent]
+
+
+# class CreateEmbeddingResponse(BaseModel):
+#     object: str = Field(
+#         ..., description='The object type, which is always "embedding".'
+#     )
+#     model: str = Field(
+#         ..., description='The name of the model used to generate the embedding.'
+#     )
+#     data: List[Embedding] = Field(
+#         ..., description='The list of embeddings generated by the model.'
+#     )
+#     usage: Usage = Field(..., description='The usage information for the request.')
+
+
+# class FineTune(BaseModel):
+#     id: str = Field(
+#         ...,
+#         description='The object identifier, which can be referenced in the API endpoints.',
+#     )
+#     object: str = Field(
+#         ..., description='The object type, which is always "fine-tune".'
+#     )
+#     created_at: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) for when the fine-tuning job was created.',
+#     )
+#     updated_at: int = Field(
+#         ...,
+#         description='The Unix timestamp (in seconds) for when the fine-tuning job was last updated.',
+#     )
+#     model: str = Field(..., description='The base model that is being fine-tuned.')
+#     fine_tuned_model: str = Field(
+#         ..., description='The name of the fine-tuned model that is being created.'
+#     )
+#     organization_id: str = Field(
+#         ..., description='The organization that owns the fine-tuning job.'
+#     )
+#     status: str = Field(
+#         ...,
+#         description='The current status of the fine-tuning job, which can be either `created`, `running`, `succeeded`, `failed`, or `cancelled`.',
+#     )
+#     hyperparams: Hyperparams = Field(
+#         ...,
+#         description='The hyperparameters used for the fine-tuning job. See the [fine-tuning guide](/docs/guides/legacy-fine-tuning/hyperparameters) for more details.',
+#     )
+#     training_files: List[OpenAIFile] = Field(
+#         ..., description='The list of files used for training.'
+#     )
+#     validation_files: List[OpenAIFile] = Field(
+#         ..., description='The list of files used for validation.'
+#     )
+#     result_files: List[OpenAIFile] = Field(
+#         ..., description='The compiled results files for the fine-tuning job.'
+#     )
+#     events: Optional[List[FineTuneEvent]] = Field(
+#         None,
+#         description='The list of events that have been observed in the lifecycle of the FineTune job.',
+#     )
+
+
+# class ListFineTunesResponse(BaseModel):
+#     object: str
+#     data: List[FineTune]

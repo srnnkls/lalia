@@ -105,11 +105,11 @@ class Folds:
         return (
             message
             for message, fold in zip(messages, self.messages, strict=True)
-            if not fold
+            if fold is FoldState.UNFOLDED
         ), (
             message
             for message, fold in zip(pending, self.pending, strict=True)
-            if not fold
+            if fold is FoldState.UNFOLDED
         )
 
     def commit(self):
