@@ -15,11 +15,11 @@ from rich.panel import Panel
 from rich.table import Table, box
 from rich.text import Text
 
-from lalia.chat import messages
-from lalia.chat.messages import tags
+from lalia.chat.messages import messages, tags
+from lalia.chat.messages.fold_state import FoldState
 from lalia.chat.roles import Role
 
-TEXT_COLOR = "grey89"
+TEXT_COLOR = "grey15"
 
 
 class TagColor(StrEnum):
@@ -38,34 +38,46 @@ Mapping of tag colors to styles.
 """
 TAG_STYLES = {color: f"{TEXT_COLOR} on {color}" for color in TagColor}
 
+"""
+Mapping of tag colors to styles for folded tags.
+"""
+FOLDED_TAG_STYLES = {color: f"{color} dim" for color in TagColor}
+
+ROW_STYLE = ""
+FOLDED_ROW_STYLE = "dim"
+
 
 class ConversationRenderer(JupyterMixin):
     max_cell_length = 2000
     cell_width = 80
     include_timestamps = True
 
-    def __init__(self, messages: Sequence[messages.Message], title: str | None = None):
+    def __init__(
+        self,
+        messages: Sequence[messages.Message],
+        fold_states: Sequence[FoldState],
+        title: str | None = None,
+    ):
         self.messages = messages
+        self.fold_states = fold_states
         self.title = title
 
     def __rich__(self) -> Table:
         table = Table(
-            title=self.title, show_header=False, box=box.SIMPLE, width=self.cell_width
+            title=self.title,
+            show_header=False,
+            box=box.SIMPLE,
+            width=self.cell_width,
+            padding=(1, 0, 0, 0),
         )
         if self.include_timestamps:
-            table.add_column("Timestamp", style="dim")
-        table.add_column("Role", style="dim")
+            table.add_column("Timestamp")
+        table.add_column("Role")
         table.add_column("Message")
 
-        for message in self.messages:
-            timestamp = message.to_base_message().timestamp
+        for message, fold in zip(self.messages, self.fold_states, strict=True):
+            timestamp = message.timestamp
             role = message.to_base_message().role
-            if message.tags:
-                tags = " ".join(
-                    TagRenderer(tag).__rich__().markup for tag in message.tags
-                )
-            else:
-                tags = ""
 
             content = (
                 JSON(json.dumps(asdict(message.function_call)))
@@ -73,36 +85,51 @@ class ConversationRenderer(JupyterMixin):
                 and message.function_call
                 else message.content
             )
-            row = self._format_row(timestamp, tags, role, content)
-            table.add_row(*row)
+            row = self._format_row(timestamp, message.tags, role, content, fold)
+
+            row_style = ROW_STYLE if fold is FoldState.UNFOLDED else FOLDED_ROW_STYLE
+            table.add_row(
+                *row,
+                style=f"{role.color} {row_style}",
+            )
         return table
 
-    def _format_row(
-        self, timestamp: datetime, tags: str, role: Role, content: str | JSON | None
-    ) -> tuple[str, str | Group] | tuple[str, str, str | Group]:
-        role_formatted = f"[{role.color}]{role}[/{role.color}]"
-
-        if content is None:
-            content = "null"
-        if isinstance(content, str) and len(content) > self.max_cell_length:
-            content = f"{content[:self.max_cell_length-4]}..."
-        if isinstance(content, JSON):
-            content_formatted = (
-                Group(tags, Text(""), content) if tags else Group(content)
-            )
+    def _format_content(
+        self, content: str | JSON | None, fold_state: FoldState
+    ) -> Text | JSON:
+        if fold_state is FoldState.FOLDED:
+            content_formatted = Text(f"--- folded ({len(str(content))} characters) ---")
+        elif content is None:
+            content_formatted = Text("null")
+        elif isinstance(content, str) and len(content) > self.max_cell_length:
+            content_formatted = Text(f"{content[: self.max_cell_length]} ...")
+        elif isinstance(content, JSON):
+            content_formatted = content
         else:
-            content_formatted = (
-                f"{tags}\n\n[{role.color}]{content}[/{role.color}]"
-                if tags
-                else f"[{role.color}]{content}[/{role.color}]"
+            content_formatted = Text(content)
+        return content_formatted
+
+    def _format_row(
+        self,
+        timestamp: datetime,
+        tags: set[tags.Tag],
+        role: Role,
+        content: str | JSON | None,
+        fold_state: FoldState,
+    ) -> tuple[Text, Group] | tuple[Text, Text, Group]:
+        role_formatted = Text(role)
+        content_formatted = Group(self._format_content(content, fold_state))
+        if tags:
+            tags_formatted = Text.from_markup(
+                " ".join(
+                    [TagRenderer(tag, fold_state).__rich__().markup for tag in tags]
+                )
             )
+            content_formatted = Group(tags_formatted, content_formatted)
 
         if self.include_timestamps:
-            timetamp_formatted = (
-                f"[{role.color}]{timestamp:%y-%m-%d}\n"
-                f"{timestamp:%H:%M:%S}[/{role.color}]"
-            )
-            return timetamp_formatted, role_formatted, content_formatted
+            timestamp_formatted = Text(f"{timestamp:%y-%m-%d}\n{timestamp:%H:%M:%S}")
+            return timestamp_formatted, role_formatted, content_formatted
         else:
             return role_formatted, content_formatted
 
@@ -112,22 +139,32 @@ class MessageRenderer(JupyterMixin):
         self.message = message
 
     def __rich__(self) -> Table:
-        return ConversationRenderer([self.message]).__rich__()
+        return ConversationRenderer([self.message], [FoldState.UNFOLDED]).__rich__()
 
 
 class MessageBufferRender(JupyterMixin):
     panel_width = 88
 
     def __init__(
-        self, messages: Sequence[messages.Message], pending: Sequence[messages.Message]
+        self,
+        messages: Sequence[messages.Message],
+        pending: Sequence[messages.Message],
+        message_fold_states: Sequence[FoldState],
+        pending_fold_states: Sequence[FoldState],
     ):
         self.messages = messages
         self.pending = pending
+        self.message_fold_states = message_fold_states
+        self.pending_fold_states = pending_fold_states
 
     def __rich__(self) -> Group:
-        messages = ConversationRenderer(self.messages).__rich__()
+        messages = ConversationRenderer(
+            self.messages, self.message_fold_states
+        ).__rich__()
         if self.pending:
-            pending = ConversationRenderer(self.pending).__rich__()
+            pending = ConversationRenderer(
+                self.pending, self.pending_fold_states
+            ).__rich__()
             return Group(
                 Panel(messages, title="Messages", width=self.panel_width),
                 Text("\n"),
@@ -142,20 +179,6 @@ class MessageBufferRender(JupyterMixin):
 class TagRenderer(JupyterMixin):
     colors: ClassVar[deque[TagColor]] = deque(TagColor)
     key_registry: ClassVar[dict[str, TagColor]] = {}
-
-    def __init__(self, tag: tags.Tag):
-        self.tag = tag
-
-    def __rich__(self) -> Text:
-        if self.tag.color is None:
-            color = self.get_color(self.tag.key)
-        else:
-            color = self.tag.color
-
-        return Text.from_markup(
-            f"[b]{self.tag.key}:[/b] {self.tag.value}",
-            style=TAG_STYLES[color],
-        )
 
     @classmethod
     def get_color(cls, key: str) -> TagColor:
@@ -173,3 +196,24 @@ class TagRenderer(JupyterMixin):
             cls.key_registry[key] = color
             if color in cls.colors:
                 cls.colors.remove(color)
+
+    def __init__(
+        self,
+        tag: tags.Tag,
+        fold_state: FoldState = FoldState.UNFOLDED,
+    ):
+        self.tag = tag
+        self.fold_state = fold_state
+
+    def __rich__(self) -> Text:
+        if self.tag.color is None:
+            color = self.get_color(self.tag.key)
+        else:
+            color = self.tag.color
+
+        return Text.from_markup(
+            f"[b] {self.tag.key}:[/b] {self.tag.value} ",
+            style=TAG_STYLES[color]
+            if self.fold_state is FoldState.UNFOLDED
+            else FOLDED_TAG_STYLES[color],
+        )
