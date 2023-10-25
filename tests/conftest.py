@@ -10,13 +10,15 @@ from lalia.chat.messages import (
 )
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.tags import Tag, TagPattern
-
-Tag.register_key_color("user", "yellow")
-Tag.register_key_color("assistant", "blue")
-Tag.register_key_color("system", "red")
-Tag.register_key_color("general", "magenta")
+from lalia.io.renderers import TagColor
 
 OPENAI_API_KEY_REF = "ahssdo26ixj2gloto2b4z34k7u/OpenAI API Key/OPENAI_API_TOKEN"
+
+
+Tag.register_key_color("user", TagColor.YELLOW)
+Tag.register_key_color("assistant", TagColor.BLUE)
+Tag.register_key_color("system", TagColor.RED)
+Tag.register_key_color("general", TagColor.MAGENTA)
 
 
 @pytest.fixture()

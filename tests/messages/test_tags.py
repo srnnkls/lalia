@@ -4,11 +4,11 @@ import re
 from collections.abc import Callable
 from dataclasses import field
 
-from pydantic import validate_call
+import pytest
 from pydantic.dataclasses import dataclass
 from rich import print as pprint
 
-from lalia.chat.messages.tags import Tag, TagPattern, predicate_registry
+from lalia.chat.messages.tags import Tag, TagPattern, _And, _Or, predicate_registry
 
 
 @dataclass(frozen=True)
@@ -49,48 +49,59 @@ class LikeMessageBuffer:
         )
 
 
-m = LikeMessageBuffer(
-    messages=[
-        LikeMessage(
-            content="first",
-            tags={Tag(key="a", value="1"), Tag(key="b", value="2")},
-        ),
-        LikeMessage(content="second", tags={Tag(key="b", value="2")}),
-        LikeMessage(content="third", tags={Tag(key="c", value="3")}),
-    ]
-)
+@pytest.fixture
+def messages_with_tags():
+    return LikeMessageBuffer(
+        messages=[
+            LikeMessage(
+                content="first",
+                tags={Tag(key="a", value="1"), Tag(key="b", value="2")},
+            ),
+            LikeMessage(content="second", tags={Tag(key="b", value="2")}),
+            LikeMessage(content="third", tags={Tag(key="c", value="3")}),
+        ]
+    )
 
-pprint(m.filter(tags=Tag(key="a", value="1") & Tag(key="b", value="2")))
-pprint(
-    m.filter(
-        tags=(Tag(key="a", value="1") & Tag(key="b", value="2"))
-        | Tag(key="c", value="3")
+
+def test_tags_operators():
+    and_tags = Tag(key="a", value="1") & Tag(key="b", value="2")
+    assert isinstance(and_tags, _And)
+    assert and_tags.predicates == (
+        predicate_registry.derive_predicate(Tag(key="a", value="1")),
+        predicate_registry.derive_predicate(Tag(key="b", value="2")),
     )
-)
-pprint(m.filter(tags=Tag(key="a", value="1")))
-pprint(
-    m.filter(
-        tags=TagPattern(
-            key=re.compile(".*"),
-            value=re.compile(".*"),
-        )
+    assert and_tags({Tag(key="a", value="1"), Tag(key="b", value="2")})
+    assert not and_tags({Tag(key="a", value="2"), Tag(key="b", value="2")})
+    or_tags = Tag(key="a", value="1") | Tag(key="b", value="2")
+    assert isinstance(or_tags, _Or)
+    assert or_tags.predicates == (
+        predicate_registry.derive_predicate(Tag(key="a", value="1")),
+        predicate_registry.derive_predicate(Tag(key="b", value="2")),
     )
-)
-pprint(
-    m.filter(
-        tags={".*": ".*"},
+    assert or_tags({Tag(key="a", value="1"), Tag(key="b", value="2")})
+    assert not or_tags({Tag(key="a", value="2")})
+
+
+def test_tags_filter(messages_with_tags):
+    m = messages_with_tags
+    assert (
+        m.filter(tags=Tag(key="a", value="1")).messages
+        == messages_with_tags.messages[:1]
     )
-)
-pprint(
-    m.filter(
-        lambda message: Tag(key="a", value="1") in message.tags
-        and Tag(key="b", value="2") in message.tags
+    assert (
+        m.filter(tags=Tag(key="b", value="2")).messages
+        == messages_with_tags.messages[:2]
     )
-)
-pprint(
-    m.filter(
-        lambda message: {Tag(key="a", value="1"), Tag(key="b", value="2")}
-        <= message.tags
+    assert (
+        m.filter(tags=Tag(key="c", value="3")).messages
+        == messages_with_tags.messages[2:]
     )
-)
-pprint(m.filter(predicate=lambda message: message.content == "first"))
+    assert m.filter(tags=Tag("d", "3")).messages == []
+
+
+def test_tags_operators_filter(messages_with_tags):
+    m = messages_with_tags
+    assert (
+        m.filter(tags=Tag(key="a", value="1") & Tag(key="b", value="2")).messages
+        == messages_with_tags.messages[:1]
+    )
