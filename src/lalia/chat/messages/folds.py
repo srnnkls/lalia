@@ -15,7 +15,7 @@ from lalia.chat.messages.tags import (
     predicate_registry,
 )
 
-DEFAULT_FOLD_TAGS = TagPattern("function", ".*") | TagPattern("error", ".*")
+DEFAULT_FOLD_TAGS = {TagPattern("error", ".*")}
 
 
 def derive_tag_predicate(

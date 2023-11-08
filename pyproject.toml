@@ -8,6 +8,7 @@ requires-python = ">=3.11"
 keywords = []
 version = "0.0.1"
 dependencies = [
+  "jsonref",
   "openai",
   "pydantic",
   "rich",

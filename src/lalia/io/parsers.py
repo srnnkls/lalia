@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from inspect import cleandoc
-from pprint import pprint
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import TypeAdapter, ValidationError
@@ -16,6 +15,9 @@ from lalia.chat.roles import Role
 if TYPE_CHECKING:
     from lalia.llm import LLM
 from lalia.chat.messages import to_raw_messages
+from lalia.io.logging import get_logger
+
+logger = get_logger(__name__)
 
 yaml = YAML(typ="safe")
 
@@ -70,11 +72,9 @@ class LLMParser:
         self,
         llms: Sequence[LLM],
         max_retries: int = 10,
-        debug: bool = False,
     ):
         self.llms = llms
         self.max_retries = max_retries
-        self.debug = debug
 
     def _complete_invalid_input(
         self,
@@ -106,8 +106,7 @@ class LLMParser:
             functions=[schema],
             function_call={"name": adapter.validator.title},
         )
-        if self.debug:
-            pprint(response)
+        logger.debug(response, adapter.json_schema())
 
         choice = next(iter(response["choices"]))
         return self._handle_choice(choice)
@@ -122,14 +121,14 @@ class LLMParser:
                 continue
             else:
                 return deserialized
+        logger.debug(errors)
         raise errors["loads"]
 
     def _handle_choice(self, choice: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         if choice["message"]["role"] == Role.ASSISTANT:
             message = choice["message"]
             arguments = message["function_call"]["arguments"]
-            if self.debug:
-                pprint({"arguments": arguments})
+            logger.debug(arguments)
             return arguments, message
         else:
             raise ValueError("No function_call for completion.")

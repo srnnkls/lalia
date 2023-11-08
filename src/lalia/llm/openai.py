@@ -13,9 +13,12 @@ from pydantic.dataclasses import dataclass
 from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
 from lalia.functions import get_callable, get_name, get_schema
+from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
+
+logger = get_logger(__name__)
 
 
 class FunctionCallDirective(StrEnum):
@@ -52,7 +55,6 @@ class OpenAIChat:
     api_key: InitVar[str]
     temperature: float = 1.0
     max_retries: int = 5
-    debug: bool = False
     parser: InitVar[Parser | None] = None
 
     failure_messages: list[Message] = field(
@@ -68,7 +70,6 @@ class OpenAIChat:
         if parser is None:
             self._parser = LLMParser(
                 llms=[self],
-                debug=self.debug,
             )
         else:
             self._parser = parser
@@ -170,9 +171,8 @@ class OpenAIChat:
 
         raw_response = openai.ChatCompletion.create(**params).to_dict()  # type: ignore
 
-        if self.debug:
-            pprint(params)
-            pprint(raw_response)
+        logger.debug(params)
+        logger.debug(raw_response)
 
         self._responses.append(raw_response)
 
