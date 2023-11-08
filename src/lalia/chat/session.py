@@ -21,11 +21,15 @@ from lalia.chat.messages import (
     UserMessage,
 )
 from lalia.chat.messages.buffer import MessageBuffer
+from lalia.chat.messages.tags import Tag
 from lalia.functions import Error, execute_function_call, get_name
+from lalia.io.logging import get_logger
 from lalia.llm import LLM
 from lalia.llm.openai import Choice
 
 console = Console()
+
+logger = get_logger(__name__)
 
 
 @dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
@@ -60,9 +64,6 @@ class Session:
     def __call__(self, user_input: str = "") -> Message:
         try:
             self.messages.add(UserMessage(content=user_input))
-            if self.debug:
-                for message in self.messages:
-                    console.print(message)
             for _ in range(self.max_iterations):
                 assistant_message, finish_reason = self.complete()
                 if finish_reason is FinishReason.STOP:
@@ -101,8 +102,7 @@ class Session:
             **params,
         )
 
-        if self.debug:
-            console.print(response)
+        logger.debug(response)
 
         completions = []
         completion_messages = []
@@ -132,15 +132,14 @@ class Session:
         """
         Completes an errornous function call and isolates the error message.
         """
-        messages = list(self.messages)
-        messages.append(message)
-        response = self.llm.complete(messages, self.functions, n_choices=1)
+        self.messages.add(message)
+        with self.messages.expand(message.tags):
+            response = self.llm.complete(self.messages, self.functions, n_choices=1)
         choice, *_ = response.choices
         return self._handle_choice(choice)
 
     def _handle_choice(self, choice: Choice) -> tuple[list[Message], FinishReason]:
-        if self.debug:
-            console.print(choice.message)
+        logger.debug(choice)
         match choice.message:
             case AssistantMessage(_, FunctionCall(name, arguments)):
                 result_message_or_error, finish_reason = self._handle_function_call(
@@ -148,7 +147,11 @@ class Session:
                 )
                 if isinstance(result_message_or_error, Error):
                     error_message = SystemMessage(
-                        content=result_message_or_error.message
+                        content=result_message_or_error.message,
+                        tags={
+                            Tag("error", "function_call"),
+                            Tag("function", name),
+                        },
                     )
                     return self._complete_function_call_error(error_message)
                 if finish_reason is FinishReason.DELEGATE:
@@ -188,6 +191,9 @@ class Session:
                             name=name,
                             content=json.dumps(value, indent=2, default=str),
                             result=result,
+                            tags={
+                                Tag("function", name),
+                            },
                         ),
                         finish_reason,
                     )

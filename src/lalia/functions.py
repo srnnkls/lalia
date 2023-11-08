@@ -3,10 +3,14 @@ from collections.abc import Callable
 from types import BuiltinFunctionType, FunctionType
 from typing import Annotated, Any, get_origin, get_type_hints
 
+from jsonref import replace_refs
 from pydantic import TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.finish_reason import FinishReason
+from lalia.io.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -47,8 +51,10 @@ class FunctionCallResult:
                 raise ValueError("Either `error` or `result` must be `None`")
 
 
-def is_callable_instance(x):
-    return not isinstance(x, FunctionType | BuiltinFunctionType) and callable(x)
+def is_callable_instance(callable_: object):
+    if not callable(callable_):
+        return False
+    return not isinstance(callable_, FunctionType | BuiltinFunctionType)
 
 
 def get_name(callable_: Callable[..., Any]) -> str:
@@ -80,7 +86,11 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         raise ValueError(f"Not a callable: {callable_}")
 
     adapter = TypeAdapter(validate_call(func))
-    func_schema = adapter.json_schema()
+    func_schema = {
+        key: value
+        for key, value in replace_refs(adapter.json_schema(), proxies=False).items()  # type: ignore
+        if key != "$defs"
+    }
 
     schema = {
         "name": name,
@@ -99,9 +109,10 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         if get_origin(annotation) is Annotated:
             data["description"] = next(iter(annotation.__metadata__), "")
 
-    schema["required"] = [
-        name for name in func_schema["required"] if name in parameters
-    ]
+    if "required" in func_schema:
+        schema["required"] = [
+            name for name in func_schema["required"] if name in parameters
+        ]
 
     return schema
 
@@ -109,37 +120,49 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 def execute_function_call(
     func: Callable[..., Any], arguments: dict[str, Any]
 ) -> FunctionCallResult:
-    wrapped = validate_call(get_callable(func))
+    wrapped = validate_call(func)
     try:
         result = wrapped(**arguments)
     except (TypeError, ValidationError) as e:
+        logger.debug(e)
         return FunctionCallResult(
             name=get_name(func),
             parameters=arguments,
             error=Error(f"Invalid arguments. Please check the provided arguments: {e}"),
         )
-    if isinstance(result, FunctionCallResult):
-        return result
 
-    if isinstance(result, Result):
-        return FunctionCallResult(
-            name=get_name(func),
-            parameters=arguments,
-            value=result.value,
-            error=result.error,
-            finish_reason=result.finish_reason,
-        )
+    match result:
+        case FunctionCallResult():
+            return result
+        case Result(value, error, finish_reason):
+            if error is not None:
+                logger.debug(error)
+            return FunctionCallResult(
+                name=get_name(func),
+                parameters=arguments,
+                value=value,
+                error=error,
+                finish_reason=finish_reason,
+            )
+        case str():
+            if result.startswith("Error:"):
+                error = Error(result.removeprefix("Error:").strip())
+                logger.debug(error)
 
-    if isinstance(result, str) and result.startswith("Error:"):
-        return FunctionCallResult(
-            name=get_name(func),
-            parameters=arguments,
-            error=Error(
-                result.removeprefix("Error:").strip(" "),
-            ),
-        )
-    return FunctionCallResult(
-        name=get_name(func),
-        parameters=arguments,
-        value=result,
-    )
+                return FunctionCallResult(
+                    name=get_name(func),
+                    parameters=arguments,
+                    error=error,
+                )
+            else:
+                return FunctionCallResult(
+                    name=get_name(func),
+                    parameters=arguments,
+                    value=result,
+                )
+        case _:
+            return FunctionCallResult(
+                name=get_name(func),
+                parameters=arguments,
+                value=result,
+            )

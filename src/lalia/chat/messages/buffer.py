@@ -12,9 +12,12 @@ from lalia.chat.messages.tags import (
     Tag,
     TagPattern,
 )
+from lalia.io.logging import get_logger
 from lalia.io.renderers import MessageBufferRender
 
 console = Console()
+
+logger = get_logger(__name__)
 
 
 class MessageBuffer(Sequence[Message]):
@@ -62,6 +65,7 @@ class MessageBuffer(Sequence[Message]):
             self.add_message(message)
 
     def add_message(self, message: Message):
+        logger.debug(message)
         if self.verbose:
             console.print(message)
         self.pending.append(message)
