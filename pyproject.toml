@@ -1,12 +1,11 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "lalia"
 requires-python = ">=3.11"
 keywords = []
-version = "0.0.1"
 dependencies = [
   "jsonref",
   "openai",
@@ -14,6 +13,9 @@ dependencies = [
   "rich",
   "ruamel.yaml",
   "ruamel.yaml.string",
+]
+dynamic = [
+  "version"
 ]
 
 [tool.hatch.build]
@@ -36,6 +38,12 @@ dependencies = [
   "ruff-lsp"
 ]
 python = "3.11"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+local_scheme = "no-local-version"
 
 [tool.black]
 target-version = ["py311"]

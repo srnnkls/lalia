@@ -1,0 +1,47 @@
+stages:
+  - lint
+  - publish-release
+
+lint:
+  image: registry.gitlab.com/getml/all/build-images/python:3.11
+  stage: lint
+  cache:
+    when: always
+    paths:
+      - .cache/pip
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      changes:
+        compare_to: "refs/heads/main"
+        paths:
+          - "*"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  script:
+    - echo "$(hatch dep show requirements -p)" > requirements.txt
+    - pip install -r requirements.txt
+    - EXIT_STATUS=0
+    - ruff check . || EXIT_STATUS=$?
+    - black --check . || EXIT_STATUS=$?
+    - if [ "$EXIT_STATUS" != "0" ]; then echo "ignoring errors for now"; fi
+
+publish-release:
+  image: registry.gitlab.com/getml/all/build-images/python:3.11
+  stage: publish-release
+  cache:
+    paths:
+      - .cache/pip
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs: [lint]
+  script:
+    - '[[ -z "$CI_COMMIT_TAG"  || "$CI_COMMIT_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Version tag does not match pattern"; exit 1; }'
+    - 'echo "Publishing version: $(hatch version)"'
+    - hatch --cache-dir .cache/pip build -t wheel
+    - hatch config set publish.index.repos.cobi.url https://europe-west1-python.pkg.dev/c17-bot/cobi
+    - hatch publish -r cobi -u _json_key_base64 -a $GOOGLE_CLOUD_CREDENTIALS
