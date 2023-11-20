@@ -3,33 +3,93 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from typing import ClassVar, cast
+from enum import StrEnum
+from typing import ClassVar, TypeGuard, cast
 
 from pydantic import Field, ValidationInfo, field_validator, validate_call
 from pydantic.dataclasses import dataclass
 
 from lalia.io.renderers import TagColor, TagRenderer
 
+
+class DefaultTagKeys(StrEnum):
+    ERROR = "error"
+    FUNCTION = "function"
+
+
 GROUP_COLORS_BY_KEY = True
+
+
+def _is_tag_pattern_tuple(
+    tags: object,
+) -> TypeGuard[tuple[str | re.Pattern, str | re.Pattern]]:
+    return isinstance(tags, tuple) and all(
+        isinstance(t, str | re.Pattern) for t in tags
+    )
+
+
+def _is_tag_pattern_dict(
+    tags: object,
+) -> TypeGuard[dict[str | re.Pattern, str | re.Pattern]]:
+    return isinstance(tags, dict) and all(
+        isinstance(k, str | re.Pattern) and isinstance(v, str | re.Pattern)
+        for k, v in tags.items()
+    )
+
+
+def _convert_tag_like_set(
+    tags: set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | set[Tag]
+    | set[TagPattern]
+) -> set[TagPattern]:
+    return {TagPattern.from_tag_like(tag) for tag in tags}
+
+
+def convert_tag_like(
+    tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool],
+) -> set[TagPattern]:
+    match tags:
+        case Tag() | TagPattern():
+            return {TagPattern.from_tag_like(tags)}
+        case set() as tags_:
+            return _convert_tag_like_set(tags_)
+        case tuple() as tag:
+            return {TagPattern.from_tag_like(tag)}
+        case dict() as tag:
+            return {TagPattern.from_tag_like(tag)}
+
+    raise TypeError(f"Unsupported type for tags: '{type(tags).__name__}'")
 
 
 class PredicateRegistry:
     _predicates: ClassVar[dict[Tag | TagPattern, Callable[[set[Tag]], bool]]] = {}
 
+    @classmethod
     def register_predicate(
-        self,
+        cls,
         tag: Tag | TagPattern,
         predicate: Callable[[set[Tag]], bool],
-    ) -> Callable[[set[Tag]], bool]:
-        if tag not in self._predicates:
-            self._predicates[tag] = predicate
-        return self._predicates[tag]
+    ):
+        if tag not in cls._predicates:
+            cls._predicates[tag] = predicate
+        cls._predicates[tag]
 
-    def deregister_predicate(self, tag: Tag | TagPattern):
-        if tag in self._predicates:
-            self._predicates.pop(tag)
+    @classmethod
+    def deregister_predicate(cls, tag: Tag | TagPattern):
+        if tag in cls._predicates:
+            cls._predicates.pop(tag)
 
-    def derive_predicate(self, operand: Tag | TagPattern) -> Callable[[set[Tag]], bool]:
+    @classmethod
+    def derive_predicate(cls, operand: Tag | TagPattern) -> Callable[[set[Tag]], bool]:
         """
         A higher-order function that returns a predicate function for a given
         operand. The returned predicate function takes a set of tags and returns
@@ -41,7 +101,11 @@ class PredicateRegistry:
                 def is_in_tags(tags: set[Tag]) -> bool:
                     return tag in tags
 
-                return self.register_predicate(tag, is_in_tags)
+                if tag not in cls._predicates:
+                    cls.register_predicate(tag, is_in_tags)
+
+                return cls._predicates[tag]
+
             case TagPattern(
                 key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
             ) as tag_pattern:
@@ -52,12 +116,12 @@ class PredicateRegistry:
                         for tag in tags
                     )
 
-                return self.register_predicate(tag_pattern, matches_any_tag)
+                if tag_pattern not in cls._predicates:
+                    cls.register_predicate(tag_pattern, matches_any_tag)
+
+                return cls._predicates[tag_pattern]
 
         raise TypeError(f"No predicate defined for: '{type(operand)}'")
-
-
-predicate_registry = PredicateRegistry()
 
 
 class _PredicateOperator(ABC):
@@ -76,7 +140,7 @@ class _PredicateOperator(ABC):
     def __and__(self, other: _PredicateOperator | Tag) -> _And:
         match other:
             case Tag():
-                return _And(self, predicate_registry.derive_predicate(other))
+                return _And(self, PredicateRegistry.derive_predicate(other))
             case _PredicateOperator():
                 return _And(self, other)
         raise TypeError(
@@ -86,7 +150,7 @@ class _PredicateOperator(ABC):
     def __or__(self, other: _PredicateOperator | Tag) -> _Or:
         match other:
             case Tag():
-                return _Or(self, predicate_registry.derive_predicate(other))
+                return _Or(self, PredicateRegistry.derive_predicate(other))
             case _PredicateOperator():
                 return _Or(self, other)
         raise TypeError(
@@ -141,11 +205,11 @@ class Tag:
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
             case _PredicateOperator():
-                return _And(predicate_registry.derive_predicate(self), other)
+                return _And(PredicateRegistry.derive_predicate(self), other)
             case Tag() | TagPattern():
                 return _And(
-                    predicate_registry.derive_predicate(self),
-                    predicate_registry.derive_predicate(other),
+                    PredicateRegistry.derive_predicate(self),
+                    PredicateRegistry.derive_predicate(other),
                 )
         raise TypeError(
             f"Unsupported operand type(s) for &: '{type(self).__name__}' "
@@ -155,11 +219,11 @@ class Tag:
     def __or__(self, other: Tag | TagPattern | _PredicateOperator) -> _Or:
         match other:
             case _PredicateOperator():
-                return _Or(predicate_registry.derive_predicate(self), other)
+                return _Or(PredicateRegistry.derive_predicate(self), other)
             case Tag() | TagPattern():
                 return _Or(
-                    predicate_registry.derive_predicate(self),
-                    predicate_registry.derive_predicate(other),
+                    PredicateRegistry.derive_predicate(self),
+                    PredicateRegistry.derive_predicate(other),
                 )
         raise TypeError(
             f"Unsupported operand type(s) for |: '{type(self).__name__}' "
@@ -176,11 +240,35 @@ class TagPattern:
         yield from (cast(re.Pattern, self.key), cast(re.Pattern, self.value))
 
     @classmethod
-    def from_dict(
-        cls, tag: dict[str, str] | dict[re.Pattern, re.Pattern]
-    ) -> TagPattern:
+    def from_dict(cls, tag: dict[str | re.Pattern, str | re.Pattern]) -> TagPattern:
         key, value = next(iter(tag.items()))
         return cls(key=re.compile(key), value=re.compile(value))
+
+    @classmethod
+    def from_tag_like(
+        cls,
+        tag_like: Tag
+        | TagPattern
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern],
+    ) -> TagPattern:
+        match tag_like:
+            case Tag(str() | re.Pattern() as key, str() | re.Pattern() as value):
+                return cls(key, value)
+            case TagPattern(
+                str() | re.Pattern() as key, str() | re.Pattern() as value
+            ) as tag_pattern:
+                return tag_pattern
+            case tuple() as tag_tuple:
+                if _is_tag_pattern_tuple(tag_tuple):
+                    return cls(*tag_tuple)
+                raise TypeError(f"Incompatible tuple for tag_like: '{tag_tuple!r}'")
+            case dict() as tag_dict:
+                if _is_tag_pattern_dict(tag_dict):
+                    return cls.from_dict(tag_dict)
+                raise TypeError(f"Incompatible dict for tag_like: '{tag_dict!r}'")
+
+        raise TypeError(f"Unsupported type for tag_like: '{type(tag_like).__name__}'")
 
     @field_validator("key", "value", mode="before")
     @classmethod
@@ -192,11 +280,11 @@ class TagPattern:
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
             case _PredicateOperator():
-                return _And(predicate_registry.derive_predicate(self), other)
+                return _And(PredicateRegistry.derive_predicate(self), other)
             case Tag() | TagPattern():
                 return _And(
-                    predicate_registry.derive_predicate(self),
-                    predicate_registry.derive_predicate(other),
+                    PredicateRegistry.derive_predicate(self),
+                    PredicateRegistry.derive_predicate(other),
                 )
         raise TypeError(
             f"Unsupported operand type(s) for &: '{type(self).__name__}' "
@@ -206,11 +294,11 @@ class TagPattern:
     def __or__(self, other: Tag | TagPattern | _PredicateOperator) -> _Or:
         match other:
             case _PredicateOperator():
-                return _Or(predicate_registry.derive_predicate(self), other)
+                return _Or(PredicateRegistry.derive_predicate(self), other)
             case Tag() | TagPattern():
                 return _Or(
-                    predicate_registry.derive_predicate(self),
-                    predicate_registry.derive_predicate(other),
+                    PredicateRegistry.derive_predicate(self),
+                    PredicateRegistry.derive_predicate(other),
                 )
         raise TypeError(
             f"Unsupported operand type(s) for |: '{type(self).__name__}' "

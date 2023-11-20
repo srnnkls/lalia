@@ -2,7 +2,7 @@ import logging
 import re
 from collections.abc import Iterator
 from enum import StrEnum
-from typing import Any, ClassVar, reveal_type
+from typing import Any, ClassVar
 
 from rich.logging import RichHandler
 from rich.pretty import pretty_repr

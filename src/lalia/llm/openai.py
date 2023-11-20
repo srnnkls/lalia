@@ -3,16 +3,15 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from pprint import pprint
 from typing import Any
 
 import openai
-from pydantic import ConfigDict, TypeAdapter, ValidationError, validate_call
+from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
-from lalia.functions import get_callable, get_name, get_schema
+from lalia.functions import get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
 
@@ -94,15 +93,24 @@ class OpenAIChat:
         return self.complete(messages)
 
     def _parse_function_call_args(
-        self, response: dict[str, Any], functions: Iterable[Callable[..., Any]]
+        self,
+        response: dict[str, Any],
+        functions: Iterable[Callable[..., Any]],
+        messages: Sequence[Message] = (),
     ) -> dict[str, Any]:
-        if "function_call" in response["choices"][0]["message"]:
-            name = response["choices"][0]["message"]["function_call"]["name"]
-            arguments = response["choices"][0]["message"]["function_call"]["arguments"]
-            func = next(iter(func for func in functions if get_name(func) == name))
-            adapter = TypeAdapter(validate_call(get_callable(func)))
-            args, _ = self._parser.parse(arguments, adapter)
-            response["choices"][0]["message"]["function_call"]["arguments"] = args
+        if (
+            function_call := response["choices"][0]["message"].get("function_call")
+        ) is not None:
+            name = function_call["name"]
+            payload = function_call["arguments"]
+            func = next(func for func in functions if get_name(func) == name)
+            args, parsing_error_messages = self._parser.parse_function_call_args(
+                payload=payload,
+                function=func,
+                messages=messages,
+            )
+            function_call["arguments"] = args
+            function_call["parsing_error_messages"] = parsing_error_messages
             return response
         else:
             return response
@@ -120,20 +128,23 @@ class OpenAIChat:
         func_schemas = [get_schema(func) for func in functions] if functions else []
 
         for _ in range(self.max_retries):
-            raw_response = self.complete_raw(
-                messages=to_raw_messages(messages),
-                functions=func_schemas,
-                function_call=function_call,
-                n_choices=n_choices,
-                temperature=temperature,
-                model=model,
-            )
-            if functions:
-                raw_response = self._parse_function_call_args(raw_response, functions)
             try:
-                response = ChatCompletionResponse(**raw_response)
-            except (ValidationError, json.JSONDecodeError) as e:
-                self._complete_invalid_input(messages, e)
+                raw_response = self.complete_raw(
+                    messages=to_raw_messages(messages),
+                    functions=func_schemas,
+                    function_call=function_call,
+                    n_choices=n_choices,
+                    temperature=temperature,
+                    model=model,
+                )
+                if functions:
+                    raw_response = self._parse_function_call_args(
+                        raw_response, functions, messages
+                    )
+
+                response = ChatCompletionResponse(**raw_response)  # type: ignore
+            except Exception as e:
+                logger.exception(e)
                 continue
             else:
                 return response

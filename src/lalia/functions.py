@@ -13,6 +13,14 @@ from lalia.io.logging import get_logger
 logger = get_logger(__name__)
 
 
+def dereference_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in replace_refs(schema, proxies=False).items()  # type: ignore
+        if key != "$defs"
+    }
+
+
 @dataclass
 class Error:
     message: str
@@ -36,7 +44,7 @@ class FunctionCallResult:
     """
 
     name: str
-    parameters: dict[str, Any]
+    arguments: dict[str, Any]
     value: Any | None = None
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.DELEGATE
@@ -51,7 +59,7 @@ class FunctionCallResult:
                 raise ValueError("Either `error` or `result` must be `None`")
 
 
-def is_callable_instance(callable_: object):
+def is_callable_instance(callable_: object) -> bool:
     if not callable(callable_):
         return False
     return not isinstance(callable_, FunctionType | BuiltinFunctionType)
@@ -86,15 +94,11 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
         raise ValueError(f"Not a callable: {callable_}")
 
     adapter = TypeAdapter(validate_call(func))
-    func_schema = {
-        key: value
-        for key, value in replace_refs(adapter.json_schema(), proxies=False).items()  # type: ignore
-        if key != "$defs"
-    }
+    func_schema = dereference_schema(adapter.json_schema())
 
     schema = {
         "name": name,
-        "description": inspect.cleandoc(doc) if doc else None,
+        "description": inspect.cleandoc(doc) if doc is not None else "",
         "parameters": {"type": "object", "properties": {}},
     }
 
@@ -120,14 +124,14 @@ def get_schema(callable_: Callable[..., Any]) -> dict[str, Any]:
 def execute_function_call(
     func: Callable[..., Any], arguments: dict[str, Any]
 ) -> FunctionCallResult:
-    wrapped = validate_call(func)
+    func_with_validation = validate_call(get_callable(func))
     try:
-        result = wrapped(**arguments)
+        result = func_with_validation(**arguments)
     except (TypeError, ValidationError) as e:
         logger.debug(e)
         return FunctionCallResult(
             name=get_name(func),
-            parameters=arguments,
+            arguments=arguments,
             error=Error(f"Invalid arguments. Please check the provided arguments: {e}"),
         )
 
@@ -139,7 +143,7 @@ def execute_function_call(
                 logger.debug(error)
             return FunctionCallResult(
                 name=get_name(func),
-                parameters=arguments,
+                arguments=arguments,
                 value=value,
                 error=error,
                 finish_reason=finish_reason,
@@ -151,18 +155,18 @@ def execute_function_call(
 
                 return FunctionCallResult(
                     name=get_name(func),
-                    parameters=arguments,
+                    arguments=arguments,
                     error=error,
                 )
             else:
                 return FunctionCallResult(
                     name=get_name(func),
-                    parameters=arguments,
+                    arguments=arguments,
                     value=result,
                 )
         case _:
             return FunctionCallResult(
                 name=get_name(func),
-                parameters=arguments,
+                arguments=arguments,
                 value=result,
             )

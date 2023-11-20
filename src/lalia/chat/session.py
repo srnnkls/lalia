@@ -5,9 +5,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import field
 from typing import Any
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic.dataclasses import dataclass
-from rich.console import Console
 
 from lalia.chat import dispatchers
 from lalia.chat.completions import Completion
@@ -21,15 +20,24 @@ from lalia.chat.messages import (
     UserMessage,
 )
 from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages.tags import Tag
-from lalia.functions import Error, execute_function_call, get_name
+from lalia.chat.messages.tags import Tag, TagPattern
+from lalia.functions import Error, FunctionCallResult, execute_function_call, get_name
 from lalia.io.logging import get_logger
 from lalia.llm import LLM
 from lalia.llm.openai import Choice
 
-console = Console()
-
 logger = get_logger(__name__)
+
+MAX_FUNCTION_CALL_RETRY_FAILURE_MESSAGE_TEMPLATE = (
+    "Error: Calling of function `{name}` failed after"
+    " {max_function_call_retries} retries."
+)
+
+ARGUMENT_PARSING_FAILURE_MESSAGE_TEMPLATE = (
+    "Error: Parsing of function_call arguments for {name} failed."
+)
+
+FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
 
 @dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
@@ -40,14 +48,23 @@ class Session:
     )
     init_messages: Sequence[Message] = field(default_factory=list)
     functions: Sequence[Callable[..., Any]] = ()
+    failure_messages: Sequence[Message] = field(
+        default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
+    )
     dispatcher: dispatchers.Dispatcher = field(
         default_factory=dispatchers.FunctionsDispatcher
     )
     autocommit: bool = True
     memory: int = 100
     max_iterations: int = 10
+    max_function_call_attempts: int = 5
+    rollback_on_error: bool = True
     verbose: bool = False
-    debug: bool = False
+
+    @field_validator("system_message", mode="before")
+    @classmethod
+    def parse_system_message(cls, message: str | SystemMessage) -> SystemMessage:
+        return SystemMessage(content=message) if isinstance(message, str) else message
 
     def __post_init__(self):
         if isinstance(self.system_message, str):
@@ -65,23 +82,31 @@ class Session:
         try:
             self.messages.add(UserMessage(content=user_input))
             for _ in range(self.max_iterations):
-                assistant_message, finish_reason = self.complete()
-                if finish_reason is FinishReason.STOP:
-                    return assistant_message
-            return self._complete_failure()
+                completion_message, finish_reason = self.complete()
+                match completion_message, finish_reason:
+                    case completion_message, FinishReason.STOP:
+                        return completion_message
+                    case failure_message, FinishReason.ERROR:
+                        return self._complete_failure(failure_message).message
+            return self._complete_failure().message
         except (Exception, KeyboardInterrupt) as e:
             self._handle_exception(e)
-            raise e
+            raise AssertionError("Unreachable") from e
 
-    def _complete_failure(self, message: Message | None = None) -> Message:
+    def _complete_failure(self, message: Message | None = None) -> Completion:
+        # TODO: Accept `Error` isstead of `Message`?
         self.messages.add(message)
-        choice, *_ = self.llm._complete_failure(self.messages).choices
-        (failure_message, *_), _ = self._handle_choice(choice)
-        self.rollback()
-        self.messages.add(failure_message)
+        self.messages.add_messages(self.failure_messages)
+
+        with self.messages.expand({TagPattern("error", ".*")}) as messages:
+            choice, *_ = self.llm.complete(messages).choices
+
+        assistant_message, finish_reson = self._handle_choice(choice)
+
         if self.autocommit:
             self.messages.commit()
-        return failure_message
+
+        return Completion(assistant_message, finish_reson)
 
     def _complete_choices(
         self, message: Message | None = None, n_choices=1
@@ -105,11 +130,9 @@ class Session:
         logger.debug(response)
 
         completions = []
-        completion_messages = []
 
         for choice in response.choices:
-            messages, finish_reason = self._handle_choice(choice)
-            completion_messages.extend(messages)
+            completion_message, finish_reason = self._handle_choice(choice)
 
             if dispatcher_finish_reason is not FinishReason.DELEGATE:
                 finish_reason = dispatcher_finish_reason
@@ -119,56 +142,123 @@ class Session:
                     self.messages.commit()
                 self.dispatcher.reset()
 
-            completions.append(Completion(completion_messages[-1], finish_reason))
-
-        self.messages.add_messages(completion_messages)
+            completions.append(Completion(completion_message, finish_reason))
 
         return completions
 
     def _complete_function_call_error(
         self,
-        message: SystemMessage,
-    ) -> tuple[list[Message], FinishReason]:
+        error_message: FunctionMessage,
+    ) -> AssistantMessage:
         """
-        Completes an errornous function call and isolates the error message.
+        Completes an erroneous function call and adds a tagged error message to the
+        session's messages.
         """
-        self.messages.add(message)
-        with self.messages.expand(message.tags):
-            response = self.llm.complete(self.messages, self.functions, n_choices=1)
-        choice, *_ = response.choices
-        return self._handle_choice(choice)
 
-    def _handle_choice(self, choice: Choice) -> tuple[list[Message], FinishReason]:
+        self.messages.add(error_message)
+
+        with self.messages.expand(error_message.tags) as messages:
+            logger.debug(list(messages))
+            response = self.llm.complete(
+                messages=messages,
+                functions=self.functions,
+                function_call={"name": error_message.name},
+                n_choices=1,
+            )
+
+        choice, *_ = response.choices
+        function_call_message = choice.message
+
+        return function_call_message
+
+    def _handle_function_call_message(
+        self, function_call_message: AssistantMessage
+    ) -> tuple[FunctionMessage, FinishReason]:
+        for _ in range(self.max_function_call_attempts):
+            match function_call_message.function_call:
+                case FunctionCall(
+                    name=name,
+                    arguments=arguments,
+                    parsing_error_messages=parsing_error_messages,
+                ):
+                    function_call_message.tags.add(Tag("function", name))
+
+                    if parsing_error_messages:
+                        logger.debug(parsing_error_messages)
+                        self.messages.add_messages(parsing_error_messages)
+
+                    self.messages.add(function_call_message)
+
+                    if arguments is None:
+                        function_call_message.tags.add(Tag("error", "function_call"))
+                        return self._handle_function_call_failure(
+                            failure_content=(
+                                ARGUMENT_PARSING_FAILURE_MESSAGE_TEMPLATE.format(
+                                    name=name
+                                )
+                            ),
+                            name=name,
+                        )
+
+                    function_message, finish_reason = self._handle_function_call(
+                        name, arguments
+                    )
+
+                    if finish_reason is FinishReason.ERROR:
+                        function_call_message.tags.add(Tag("error", "function_call"))
+                        function_call_message = self._complete_function_call_error(
+                            function_message
+                        )
+                        continue
+
+                    return function_message, finish_reason
+
+                case None:
+                    raise ValueError("No function_call supplied")
+
+                case _ as message:
+                    raise ValueError(
+                        f"Cannot get arguments from message type: {type(message)}"
+                    )
+
+        return self._handle_function_call_failure(
+            failure_content=(
+                MAX_FUNCTION_CALL_RETRY_FAILURE_MESSAGE_TEMPLATE.format(
+                    name=name,  # type: ignore
+                    max_function_call_retries=self.max_function_call_attempts,
+                )
+            ),
+            name=name,  # type: ignore
+        )
+
+    def _handle_choice(
+        self, choice: Choice
+    ) -> tuple[AssistantMessage | FunctionMessage, FinishReason]:
         logger.debug(choice)
         match choice.message:
-            case AssistantMessage(_, FunctionCall(name, arguments)):
-                result_message_or_error, finish_reason = self._handle_function_call(
-                    name, arguments
-                )
-                if isinstance(result_message_or_error, Error):
-                    error_message = SystemMessage(
-                        content=result_message_or_error.message,
-                        tags={
-                            Tag("error", "function_call"),
-                            Tag("function", name),
-                        },
-                    )
-                    return self._complete_function_call_error(error_message)
-                if finish_reason is FinishReason.DELEGATE:
-                    finish_reason = choice.finish_reason
-                return [choice.message, result_message_or_error], finish_reason
-            case AssistantMessage(_, None):
-                return [choice.message], choice.finish_reason
             case AssistantMessage(None, None):
                 raise ValueError(
                     "AssistantMessages without `content` must have a `function_call`"
                 )
+            case AssistantMessage(_, FunctionCall()) as function_call_message:
+                function_message, finish_reason = self._handle_function_call_message(
+                    function_call_message
+                )
+                if finish_reason is FinishReason.DELEGATE:
+                    finish_reason = choice.finish_reason
+                if finish_reason is not FinishReason.ERROR:
+                    self.messages.add(function_message)
+                return function_message, finish_reason
+            case AssistantMessage(_, None) as assistant_message:
+                self.messages.add(assistant_message)
+                return assistant_message, choice.finish_reason
             case _:
                 raise ValueError(f"Unsupported message type: {type(choice.message)}")
 
     def _handle_exception(self, exception: BaseException):
         try:
-            self.rollback()
+            if self.rollback_on_error:
+                self.rollback()
         except Exception as rollback_exception:
             raise rollback_exception from exception
         finally:
@@ -176,35 +266,64 @@ class Session:
 
     def _handle_function_call(
         self, name: str, arguments: dict[str, Any]
-    ) -> tuple[Message | Error, FinishReason]:
+    ) -> tuple[FunctionMessage, FinishReason]:
+        """
+        Executes a function call and returns the result as a FunctionMessage.
+
+        Executions run in a retry loop to handle errors.
+        """
         function_names = [get_name(func) for func in self.functions]
+
         if name in function_names:
             func = next(func for func in self.functions if get_name(func) == name)
-            result = execute_function_call(func, arguments)
-            if self.debug:
-                console.print(result)
+        else:
+            raise ValueError(f"Function `{name}` not found.")
 
-            match result.value, result.finish_reason, result.error:
-                case value, finish_reason, None:
-                    return (
-                        FunctionMessage(
-                            name=name,
-                            content=json.dumps(value, indent=2, default=str),
-                            result=result,
-                            tags={
-                                Tag("function", name),
-                            },
-                        ),
-                        finish_reason,
-                    )
-                case None, finish_reason, error:
-                    return error, finish_reason
-                case _:
-                    raise ValueError("Either `error` or `result` must be `None`")
+        result = execute_function_call(func, arguments)
+        logger.debug(result)
 
+        match result:
+            case FunctionCallResult(
+                value=value, finish_reason=finish_reason, error=None
+            ):
+                if isinstance(value, str):
+                    value_content = value
+                else:
+                    value_content = json.dumps(value, indent=2, default=str)
+                return (
+                    FunctionMessage(
+                        name=name,
+                        content=value_content,
+                        result=result,
+                        tags={
+                            Tag("function", name),
+                        },
+                    ),
+                    finish_reason,
+                )
+            case FunctionCallResult(value=None, error=Error() as error):
+                return self._handle_function_call_failure(
+                    failure_content=(f"Error: {error.message}"),
+                    name=name,
+                )
+
+            case _:
+                raise ValueError("Either `error` or `value` must be `None`")
+
+    def _handle_function_call_failure(
+        self, failure_content: str, name: str
+    ) -> tuple[FunctionMessage, FinishReason]:
         return (
-            SystemMessage(content=f"Error: Function `{name}` not found."),
-            FinishReason.DELEGATE,
+            FunctionMessage(
+                name=name,
+                content=failure_content,
+                result=None,
+                tags={
+                    Tag("function", name),
+                    Tag("error", "function_call"),
+                },
+            ),
+            FinishReason.ERROR,
         )
 
     def _repr_mimebundle_(
@@ -223,18 +342,18 @@ class Session:
     ) -> list[Completion]:
         try:
             return self._complete_choices(message, n_choices)
+
         except Exception as e:
             self._handle_exception(e)
-            raise e
+            raise AssertionError("Unreachable") from e
 
     def commit(self):
         self.messages.commit()
 
     def reset(self):
-        if isinstance(self.system_message, str):
-            self.system_message = SystemMessage(content=self.system_message)
         self.messages.clear()
         self.messages.messages = [self.system_message, *self.init_messages]
+
         self.dispatcher.reset()
 
     def revert(self):
@@ -242,4 +361,5 @@ class Session:
 
     def rollback(self):
         self.messages.rollback()
+
         self.dispatcher.reset()

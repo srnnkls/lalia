@@ -8,3 +8,4 @@ class FinishReason(StrEnum):
     CONTENT_FILTER = "content_filter"
     DELEGATE = "delegate"
     NULL = "null"
+    ERROR = "error"

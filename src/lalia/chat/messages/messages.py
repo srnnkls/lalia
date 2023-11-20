@@ -38,25 +38,6 @@ def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
 
 
 @dataclass
-class FunctionCall:
-    name: str
-    arguments: dict[str, Any]
-
-    @field_validator("arguments", mode="before")
-    @classmethod
-    def parse_arguments(cls, arguments: str | dict[str, Any]) -> dict[str, Any]:
-        if isinstance(arguments, str):
-            try:
-                return json.loads(arguments, strict=False)
-            except json.JSONDecodeError as e:
-                try:
-                    return yaml.load(arguments)
-                except YAMLError:
-                    raise e
-        return arguments
-
-
-@dataclass
 class BaseMessage:
     role: Role
     name: str | None = None
@@ -71,7 +52,7 @@ class BaseMessage:
                     "AssistantMessages without `content` must have a `function_call`"
                 )
             case (Role.ASSISTANT, function_call):
-                return AssistantMessage(function_call=FunctionCall(**function_call))
+                return AssistantMessage(function_call=FunctionCall(**function_call))  # type: ignore
             case _:
                 raise ValueError(
                     "Messages without `content` must be of role `assistant`"
@@ -91,7 +72,7 @@ class BaseMessage:
                 return FunctionMessage(
                     name=self.name,
                     content=content,
-                    result=FunctionCallResult(name=self.name, parameters={}),
+                    result=FunctionCallResult(name=self.name, arguments={}),
                 )
             case _:
                 raise ValueError(f"Unsupported role: {self.role}")
@@ -161,6 +142,26 @@ class UserMessage:
 
 
 @dataclass
+class FunctionCall:
+    name: str
+    arguments: dict[str, Any] | None
+    parsing_error_messages: list[SystemMessage] = field(default_factory=list)
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def parse_arguments(cls, arguments: str | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(arguments, str):
+            try:
+                return json.loads(arguments, strict=False)
+            except json.JSONDecodeError as e:
+                try:
+                    return yaml.load(arguments)
+                except YAMLError:
+                    raise e
+        return arguments
+
+
+@dataclass
 class AssistantMessage:
     content: str | None = None
     function_call: FunctionCall | None = None
@@ -192,8 +193,13 @@ class AssistantMessage:
                 role=Role.ASSISTANT, content=self.content, timestamp=self.timestamp
             )
 
-        f_call = asdict(self.function_call)
+        f_call = {
+            field: value
+            for field, value in asdict(self.function_call).items()
+            if field != "parsing_error_messages"
+        }
         f_call["arguments"] = json.dumps(f_call["arguments"])
+
         return BaseMessage(
             role=Role.ASSISTANT,
             content=self.content,
@@ -206,7 +212,7 @@ class AssistantMessage:
 class FunctionMessage:
     content: str
     name: str
-    result: FunctionCallResult
+    result: FunctionCallResult | None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: set[Tag] = field(default_factory=set)
 

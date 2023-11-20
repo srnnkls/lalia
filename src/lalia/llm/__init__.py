@@ -1,3 +1,4 @@
+from lalia.llm.llm import LLM
 from lalia.llm.openai import OpenAIChat
 
-LLM = OpenAIChat
+__all__ = ["LLM", "OpenAIChat"]
