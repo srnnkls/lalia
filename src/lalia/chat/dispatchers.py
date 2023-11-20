@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import field, fields
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -39,7 +39,7 @@ class DispatchCall:
     finish_reason: FinishReason = FinishReason.DELEGATE
 
     def __iter__(self):
-        yield from (vars(self)[field.name] for field in fields(self))
+        yield from (getattr(self, field.name) for field in fields(self))
 
 
 @runtime_checkable

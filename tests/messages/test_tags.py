@@ -8,7 +8,7 @@ import pytest
 from pydantic.dataclasses import dataclass
 from rich import print as pprint
 
-from lalia.chat.messages.tags import Tag, TagPattern, _And, _Or, predicate_registry
+from lalia.chat.messages.tags import PredicateRegistry, Tag, TagPattern, _And, _Or
 
 
 @dataclass(frozen=True)
@@ -31,10 +31,10 @@ class LikeMessageBuffer:
     ) -> LikeMessageBuffer:
         match tags:
             case Tag() | TagPattern():
-                tag_predicate = predicate_registry.derive_predicate(tags)
+                tag_predicate = PredicateRegistry.derive_predicate(tags)
             case dict():
                 tag_pattern = TagPattern.from_dict(tags)
-                tag_predicate = predicate_registry.derive_predicate(tag_pattern)
+                tag_predicate = PredicateRegistry.derive_predicate(tag_pattern)
             case Callable():
                 tag_predicate = tags
             case _:
@@ -67,16 +67,16 @@ def test_tags_operators():
     and_tags = Tag(key="a", value="1") & Tag(key="b", value="2")
     assert isinstance(and_tags, _And)
     assert and_tags.predicates == (
-        predicate_registry.derive_predicate(Tag(key="a", value="1")),
-        predicate_registry.derive_predicate(Tag(key="b", value="2")),
+        PredicateRegistry.derive_predicate(Tag(key="a", value="1")),
+        PredicateRegistry.derive_predicate(Tag(key="b", value="2")),
     )
     assert and_tags({Tag(key="a", value="1"), Tag(key="b", value="2")})
     assert not and_tags({Tag(key="a", value="2"), Tag(key="b", value="2")})
     or_tags = Tag(key="a", value="1") | Tag(key="b", value="2")
     assert isinstance(or_tags, _Or)
     assert or_tags.predicates == (
-        predicate_registry.derive_predicate(Tag(key="a", value="1")),
-        predicate_registry.derive_predicate(Tag(key="b", value="2")),
+        PredicateRegistry.derive_predicate(Tag(key="a", value="1")),
+        PredicateRegistry.derive_predicate(Tag(key="b", value="2")),
     )
     assert or_tags({Tag(key="a", value="1"), Tag(key="b", value="2")})
     assert not or_tags({Tag(key="a", value="2")})

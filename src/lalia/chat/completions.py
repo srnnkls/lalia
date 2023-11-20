@@ -6,7 +6,6 @@ from lalia.chat.finish_reason import FinishReason
 from lalia.chat.messages import (
     AssistantMessage,
     FunctionMessage,
-    SystemMessage,
 )
 
 
@@ -31,8 +30,8 @@ class Completion:
     Wraps a final message (after processing potential function calls).
     """
 
-    message: AssistantMessage | FunctionMessage | SystemMessage
+    message: AssistantMessage | FunctionMessage
     finish_reason: FinishReason
 
     def __iter__(self):
-        yield from (vars(self)[field.name] for field in fields(self))
+        yield from (getattr(self, field.name) for field in fields(self))

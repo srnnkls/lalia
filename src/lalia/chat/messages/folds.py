@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import field
@@ -10,23 +11,36 @@ from pydantic.dataclasses import dataclass
 from lalia.chat.messages.fold_state import FoldState
 from lalia.chat.messages.messages import Message
 from lalia.chat.messages.tags import (
+    PredicateRegistry,
     Tag,
     TagPattern,
-    predicate_registry,
+    convert_tag_like,
 )
 
 DEFAULT_FOLD_TAGS = {TagPattern("error", ".*")}
 
 
 def derive_tag_predicate(
-    tags: Tag | TagPattern | set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
+    tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool],
 ) -> Callable[[set[Tag]], bool]:
+    if not callable(tags):
+        tags = convert_tag_like(tags)
+
     match tags:
         case Tag() | TagPattern():
-            return predicate_registry.derive_predicate(tags)
-        case set(tags_):
+            return PredicateRegistry.derive_predicate(tags)
+        case set() as tag_likes:
+            tags_ = convert_tag_like(tag_likes)
             return lambda message_tags: all(
-                predicate_registry.derive_predicate(tag)(message_tags) for tag in tags_
+                PredicateRegistry.derive_predicate(tag)(message_tags) for tag in tags_
             )
         case Callable() as predicate:
             return predicate
@@ -106,6 +120,10 @@ class Folds:
             if fold is FoldState.UNFOLDED
         )
 
+    def clear(self, messages: Sequence[Message], pending: Sequence[Message]):
+        self._folds.clear()
+        self.update(messages, pending)
+
     def commit(self):
         self.message_states.extend(self.pending_states)
         self.pending_states = []
@@ -117,6 +135,10 @@ class Folds:
         | TagPattern
         | set[Tag]
         | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool],
         messages: Sequence[Message],
         pending: Sequence[Message],
@@ -138,6 +160,10 @@ class Folds:
         | TagPattern
         | set[Tag]
         | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
         | None,
         messages: Sequence[Message],
@@ -169,6 +195,10 @@ class Folds:
         | TagPattern
         | set[Tag]
         | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
         | None,
         messages: Sequence[Message],
@@ -177,6 +207,9 @@ class Folds:
         if tags is None:
             self._folds.clear()
         else:
+            if not callable(tags):
+                tags = convert_tag_like(tags)
+
             unfold = Fold(
                 predicate=derive_tag_predicate(tags),
                 state=FoldState.UNFOLDED,

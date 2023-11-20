@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from inspect import cleandoc
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -9,8 +9,10 @@ from pydantic import TypeAdapter, ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from lalia.chat.messages import BaseMessage, Message, SystemMessage
+from lalia.chat.messages import Message, SystemMessage
+from lalia.chat.messages.tags import Tag
 from lalia.chat.roles import Role
+from lalia.functions import dereference_schema, get_callable, get_schema
 
 if TYPE_CHECKING:
     from lalia.llm import LLM
@@ -21,16 +23,21 @@ logger = get_logger(__name__)
 
 yaml = YAML(typ="safe")
 
-VALIDATION_FAILURE_DIRECTIVE = cleandoc(
+VALIDATION_ERROR_DIRECTIVE = cleandoc(
     """
     Error: {error}
+
     Invalid payload: {payload}
 
     Are all required parameters provided?
+   """
+)
 
-    DON'T change any parameters that are provided and are not
-    fail the validation. If you provide corrected input, just
-    restate the respective parameters.
+DESERIALIZATION_ERROR_DIRECTIVE = cleandoc(
+    """
+    Error: {error}
+
+    Malformed input: {payload}
     """
 )
 
@@ -40,18 +47,17 @@ DESERIALIZERS = (
 )
 
 
-def get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
+def _get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
     """
-    Wrap type adapter's json schema in a function call schema.
+    Wrap a type adapter's json schema in a function call schema.
     """
     schema = adapter.json_schema()
+
     func_schema = {
         "name": adapter.validator.title,
         "parameters": {"type": "object", "properties": {}},
     }
-
-    func_schema["parameters"]["properties"] = schema["properties"]
-
+    func_schema["parameters"]["properties"] = dereference_schema(schema["properties"])
     func_schema["required"] = schema["required"]
 
     return func_schema
@@ -60,8 +66,19 @@ def get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
 @runtime_checkable
 class Parser(Protocol):
     def parse(
-        self, payload: str, adapter: TypeAdapter, messages: Sequence[Message] = ()
-    ) -> tuple[dict[str, Any], list[Message]]:
+        self,
+        payload: str,
+        adapter: TypeAdapter,
+        messages: Sequence[Message] = (),
+    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+        ...
+
+    def parse_function_call_args(
+        self,
+        payload: str,
+        function: Callable[..., Any],
+        messages: Sequence[Message] = (),
+    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
         ...
 
 
@@ -71,7 +88,7 @@ class LLMParser:
     def __init__(
         self,
         llms: Sequence[LLM],
-        max_retries: int = 10,
+        max_retries: int = 3,
     ):
         self.llms = llms
         self.max_retries = max_retries
@@ -79,40 +96,57 @@ class LLMParser:
     def _complete_invalid_input(
         self,
         payload: str,
-        adapter: TypeAdapter,
+        function_call_schema: dict[str, Any],
         messages: Sequence[dict[str, Any]],
         llm: LLM,
-        e: Exception,
-    ) -> tuple[str, dict[str, Any]]:
-        match e:
+        exception: Exception,
+    ) -> tuple[str, SystemMessage]:
+        common_tags = {
+            Tag("error", "function_call"),
+            Tag("function", function_call_schema["name"]),
+        }
+
+        match exception:
             case ValidationError():
-                failure_message = SystemMessage(
-                    content=VALIDATION_FAILURE_DIRECTIVE.format(
-                        error=e, payload=payload
-                    )
+                error_message = SystemMessage(
+                    content=VALIDATION_ERROR_DIRECTIVE.format(
+                        error=exception, payload=payload
+                    ),
+                    tags={
+                        Tag("error", "validation"),
+                        *common_tags,
+                    },
                 )
             case json.JSONDecodeError() | YAMLError():
-                failure_message = SystemMessage(
-                    content=f"Error: Malformed input: {e}. Please try again."
+                error_message = SystemMessage(
+                    content=DESERIALIZATION_ERROR_DIRECTIVE.format(
+                        error=exception, payload=payload
+                    ),
+                    tags={
+                        Tag("error", "deserialization"),
+                        *common_tags,
+                    },
                 )
             case _:
-                raise e
-        messages = list(messages)
-        messages.append(failure_message.to_base_message().to_raw_message())
-        schema = get_func_call_schema(adapter)
+                raise exception
+
+        logger.debug(error_message)
 
         response = llm.complete_raw(
-            messages,
-            functions=[schema],
-            function_call={"name": adapter.validator.title},
+            messages=[*messages, error_message.to_base_message().to_raw_message()],
+            functions=[function_call_schema],
+            function_call={"name": function_call_schema["name"]},
         )
-        logger.debug(response, adapter.json_schema())
 
         choice = next(iter(response["choices"]))
-        return self._handle_choice(choice)
+
+        arguments, _ = self._handle_choice(choice)
+
+        return arguments, error_message
 
     def _deserialize(self, payload: str) -> dict[str, Any]:
         errors = {}
+
         for deserializer, error, params in self.deserializers:
             try:
                 deserialized = deserializer(payload, **params)  # type: ignore
@@ -121,41 +155,72 @@ class LLMParser:
                 continue
             else:
                 return deserialized
-        logger.debug(errors)
+
         raise errors["loads"]
 
     def _handle_choice(self, choice: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         if choice["message"]["role"] == Role.ASSISTANT:
             message = choice["message"]
             arguments = message["function_call"]["arguments"]
-            logger.debug(arguments)
             return arguments, message
         else:
             raise ValueError("No function_call for completion.")
+
+    def _parse(
+        self,
+        payload: str,
+        adapter: TypeAdapter,
+        function_call_schema: dict[str, Any],
+        messages: Sequence[Message] = (),
+    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+        raw_messages = to_raw_messages(messages)
+        error_messages: list[SystemMessage] = []
+        for llm in self.llms:
+            for _ in range(self.max_retries):
+                try:
+                    obj = self._deserialize(payload)
+                    logger.debug(obj)
+                    adapter.validate_python(obj)
+                except (
+                    json.JSONDecodeError,
+                    YAMLError,
+                    ValidationError,
+                ) as e:
+                    payload, error_message = self._complete_invalid_input(
+                        payload=payload,
+                        function_call_schema=function_call_schema,
+                        messages=[
+                            *raw_messages,
+                            *[
+                                error_message.to_base_message().to_raw_message()
+                                for error_message in error_messages
+                            ],
+                        ],
+                        llm=llm,
+                        exception=e,
+                    )
+                    error_messages.append(error_message)
+                    continue
+
+                return obj, error_messages
+
+        return None, error_messages
 
     def parse(
         self,
         payload: str,
         adapter: TypeAdapter,
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any], list[Message]]:
-        raw_messages = to_raw_messages(messages)
-        for llm in self.llms:
-            for _ in range(self.max_retries):
-                try:
-                    obj = self._deserialize(payload)
-                    adapter.validate_python(obj)
-                except (json.JSONDecodeError, YAMLError, ValidationError) as e:
-                    payload, message = self._complete_invalid_input(
-                        payload, adapter, raw_messages, llm, e
-                    )
-                    if raw_messages:
-                        raw_messages[-1] = message
-                    else:
-                        raw_messages.append(message)
-                    continue
+    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+        function_call_schema = _get_func_call_schema(adapter)
+        return self._parse(payload, adapter, function_call_schema, messages)
 
-                return obj, [
-                    BaseMessage(**raw_message).parse() for raw_message in raw_messages
-                ]
-        raise ValueError("Unable to parse payload.")
+    def parse_function_call_args(
+        self,
+        payload: str,
+        function: Callable[..., Any],
+        messages: Sequence[Message] = (),
+    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+        adapter = TypeAdapter(get_callable(function))
+        function_call_schema = get_schema(function)
+        return self._parse(payload, adapter, function_call_schema, messages)

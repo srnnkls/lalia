@@ -80,7 +80,15 @@ class ConversationRenderer(JupyterMixin):
             role = message.to_base_message().role
 
             content = (
-                JSON(json.dumps(asdict(message.function_call)))
+                JSON(
+                    json.dumps(
+                        {
+                            k: v
+                            for k, v in asdict(message.function_call).items()
+                            if k in ("name", "arguments")
+                        }
+                    )
+                )
                 if isinstance(message, messages.AssistantMessage)
                 and message.function_call
                 else message.content
@@ -106,7 +114,10 @@ class ConversationRenderer(JupyterMixin):
         elif isinstance(content, JSON):
             content_formatted = content
         else:
-            content_formatted = Text(content)
+            try:
+                content_formatted = JSON(content)
+            except json.JSONDecodeError:
+                content_formatted = Text(content)
         return content_formatted
 
     def _format_row(
@@ -122,7 +133,10 @@ class ConversationRenderer(JupyterMixin):
         if tags:
             tags_formatted = Text.from_markup(
                 " ".join(
-                    [TagRenderer(tag, fold_state).__rich__().markup for tag in tags]
+                    [
+                        TagRenderer(tag, fold_state).__rich__().markup
+                        for tag in sorted(tags, key=lambda tag: tag.key)
+                    ]
                 )
             )
             content_formatted = Group(tags_formatted, content_formatted)
