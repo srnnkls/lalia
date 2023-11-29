@@ -19,7 +19,7 @@ from lalia.chat.messages import (
     SystemMessage,
     UserMessage,
 )
-from lalia.chat.messages.buffer import MessageBuffer
+from lalia.chat.messages.buffer import DEFAULT_FOLD_TAGS, MessageBuffer
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.functions import Error, FunctionCallResult, execute_function_call, get_name
 from lalia.io.logging import get_logger
@@ -47,6 +47,9 @@ class Session:
         default_factory=lambda: SystemMessage(content="")
     )
     init_messages: Sequence[Message] = field(default_factory=list)
+    default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
+        default_factory=lambda: DEFAULT_FOLD_TAGS
+    )
     functions: Sequence[Callable[..., Any]] = ()
     failure_messages: Sequence[Message] = field(
         default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
@@ -76,6 +79,7 @@ class Session:
                 *self.init_messages,
             ],
             verbose=self.verbose,
+            default_fold_tags=self.default_fold_tags,
         )
 
     def __call__(self, user_input: str = "") -> Message:
@@ -116,16 +120,18 @@ class Session:
         (
             llm_complete,
             messages,
+            context,
             params,
             dispatcher_finish_reason,
         ) = self.dispatcher.dispatch(self)
 
-        response = llm_complete(
-            messages=messages,
-            functions=self.functions,
-            n_choices=n_choices,
-            **params,
-        )
+        with messages.expand(context) as messages:
+            response = llm_complete(
+                messages=messages,
+                functions=self.functions,
+                n_choices=n_choices,
+                **params,
+            )
 
         logger.debug(response)
 

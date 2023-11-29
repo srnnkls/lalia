@@ -35,6 +35,8 @@ class LLMCallback(Protocol):
 class DispatchCall:
     callback: LLMCallback
     messages: MessageBuffer
+    context: set[TagPattern] = field(default_factory=set)
+    intent: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
     finish_reason: FinishReason = FinishReason.DELEGATE
 

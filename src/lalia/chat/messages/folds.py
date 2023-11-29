@@ -169,7 +169,7 @@ class Folds:
         messages: Sequence[Message],
         pending: Sequence[Message],
     ):
-        if tags is None:
+        if not tags:
             self._folds.clear()
         else:
             fold = Fold(
@@ -204,7 +204,7 @@ class Folds:
         messages: Sequence[Message],
         pending: Sequence[Message],
     ):
-        if tags is None:
+        if not tags:
             self._folds.clear()
         else:
             if not callable(tags):
