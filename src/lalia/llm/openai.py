@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -95,7 +95,7 @@ class OpenAIChat:
     def _parse_function_call_args(
         self,
         response: dict[str, Any],
-        functions: Iterable[Callable[..., Any]],
+        functions: Sequence[Callable[..., Any]],
         messages: Sequence[Message] = (),
     ) -> dict[str, Any]:
         if (
@@ -118,49 +118,73 @@ class OpenAIChat:
     def complete(
         self,
         messages: Sequence[Message],
-        functions: Iterable[Callable[..., Any]] | None = None,
+        model: ChatModel | None = None,
+        functions: Sequence[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
+        logit_bias: dict[str, float] | None = None,
+        max_tokens: int | None = None,
         n_choices: int = 1,
+        presence_penalty: float | None = None,
+        # response_format: ResponseFormat | None = None # NOT SUPPORTED
+        seed: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        # stream: bool = False, # NOT SUPPORTED
         temperature: float | None = None,
-        model: ChatModel | None = None,
+        # tools: Sequence[Tool] | None = None, # NOT SUPPORTED
+        # tool_choice: ToolChoice | None = None, # NOT SUPPORTED
+        top_p: float | None = None,
+        user: str | None = None,
+        timeout: int | None = None,
     ) -> ChatCompletionResponse:
         func_schemas = [get_schema(func) for func in functions] if functions else []
 
-        for _ in range(self.max_retries):
-            try:
-                raw_response = self.complete_raw(
-                    messages=to_raw_messages(messages),
-                    functions=func_schemas,
-                    function_call=function_call,
-                    n_choices=n_choices,
-                    temperature=temperature,
-                    model=model,
-                )
-                if functions:
-                    raw_response = self._parse_function_call_args(
-                        raw_response, functions, messages
-                    )
+        raw_response = self.complete_raw(
+            messages=to_raw_messages(messages),
+            model=model,
+            functions=func_schemas,
+            function_call=function_call,
+            logit_bias=logit_bias,
+            max_tokens=max_tokens,
+            n_choices=n_choices,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            stop=stop,
+            temperature=temperature,
+            top_p=top_p,
+            user=user,
+            timeout=timeout,
+        )
+        if functions:
+            raw_response = self._parse_function_call_args(
+                raw_response, functions, messages
+            )
 
-                response = ChatCompletionResponse(**raw_response)
+        response = ChatCompletionResponse(**raw_response)
 
-            except Exception as e:
-                logger.exception(e)
-                continue
-            else:
-                return response
-
-        return self._complete_failure(messages)
+        return response
 
     def complete_raw(
         self,
         messages: Sequence[dict[str, Any]],
-        functions: Iterable[dict[str, Any]] | None = None,
+        model: ChatModel | None = None,
+        functions: Sequence[dict[str, Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
+        logit_bias: dict[str, float] | None = None,
+        max_tokens: int | None = None,
         n_choices: int = 1,
+        presence_penalty: float | None = None,
+        # response_format: ResponseFormat | None = None # NOT SUPPORTED
+        seed: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        # stream: bool = False, # NOT SUPPORTED
         temperature: float | None = None,
-        model: ChatModel | None = None,
+        # tools: Sequence[Tool] | None = None, # NOT SUPPORTED
+        # tool_choice: ToolChoice | None = None, # NOT SUPPORTED
+        top_p: float | None = None,
+        user: str | None = None,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         if temperature is None:
             temperature = self.temperature
@@ -168,17 +192,27 @@ class OpenAIChat:
             model = self.model
 
         params = {
-            "model": model,
             "messages": messages,
+            "model": model,
+            "logit_bias": logit_bias,
+            "max_tokens": max_tokens,
             "n": n_choices,
+            "seed": seed,
+            "stop": stop,
             "temperature": temperature,
+            "top_p": top_p,
+            "timeout": timeout,
         }
 
         if functions:
             params["functions"] = functions
             params["function_call"] = function_call
 
-        messages = list(messages)
+        if presence_penalty is not None:
+            params["presence_penalty"] = presence_penalty
+
+        if user is not None:
+            params["user"] = user
 
         raw_response = self._client.chat.completions.create(**params).model_dump()
 
