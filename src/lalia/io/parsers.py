@@ -159,8 +159,8 @@ class LLMParser:
         raise errors["loads"]
 
     def _handle_choice(self, choice: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        if choice["message"]["role"] == Role.ASSISTANT:
-            message = choice["message"]
+        message = choice["message"]
+        if message["role"] == Role.ASSISTANT:
             arguments = message["function_call"]["arguments"]
             return arguments, message
         else:

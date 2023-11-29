@@ -18,3 +18,15 @@ class LLM(Protocol):
         model: ChatModel | None = None,
     ) -> ChatCompletionResponse:
         ...
+
+    def complete_raw(
+        self,
+        messages: Sequence[dict[str, Any]],
+        functions: Iterable[dict[str, Any]] | None = None,
+        function_call: FunctionCallDirective
+        | dict[str, str] = FunctionCallDirective.AUTO,
+        n_choices: int = 1,
+        temperature: float | None = None,
+        model: ChatModel | None = None,
+    ) -> dict[str, Any]:
+        ...

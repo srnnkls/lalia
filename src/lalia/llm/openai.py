@@ -1,11 +1,10 @@
-import json
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-import openai
+from openai import OpenAI
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
 
@@ -65,6 +64,7 @@ class OpenAIChat:
     def __post_init__(self, api_key: str, parser: Parser | None):
         self._api_key = api_key
         self._responses: list[dict[str, Any]] = []
+        self._client = OpenAI(api_key=api_key)
 
         if parser is None:
             self._parser = LLMParser(
@@ -142,7 +142,8 @@ class OpenAIChat:
                         raw_response, functions, messages
                     )
 
-                response = ChatCompletionResponse(**raw_response)  # type: ignore
+                response = ChatCompletionResponse(**raw_response)
+
             except Exception as e:
                 logger.exception(e)
                 continue
@@ -169,7 +170,6 @@ class OpenAIChat:
         params = {
             "model": model,
             "messages": messages,
-            "api_key": self._api_key,
             "n": n_choices,
             "temperature": temperature,
         }
@@ -180,7 +180,7 @@ class OpenAIChat:
 
         messages = list(messages)
 
-        raw_response = openai.ChatCompletion.create(**params).to_dict()  # type: ignore
+        raw_response = self._client.chat.completions.create(**params).model_dump()
 
         logger.debug(params)
         logger.debug(raw_response)
