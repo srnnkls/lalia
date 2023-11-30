@@ -57,8 +57,7 @@ def _get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
         "name": adapter.validator.title,
         "parameters": {"type": "object", "properties": {}},
     }
-    func_schema["parameters"]["properties"] = dereference_schema(schema["properties"])
-    func_schema["required"] = schema["required"]
+    func_schema["parameters"] = dereference_schema(schema)
 
     return func_schema
 
