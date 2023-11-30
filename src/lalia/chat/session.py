@@ -36,7 +36,7 @@ from lalia.io.serialization.functions import (
 )
 from lalia.io.storage import DictStorageBackend, StorageBackend
 from lalia.llm import LLM
-from lalia.llm.openai import Choice
+from lalia.llm.openai import Choice, Usage
 
 logger = get_logger(__name__)
 
@@ -423,3 +423,13 @@ class Session:
 
     def save(self):
         self.storage_backend.save(self, self.session_id)
+
+    @property
+    def tokens_used(self) -> Usage:
+        usages = (response["usage"].values() for response in self.llm._responses)
+        prompt_tokens, completion_tokens, choice_tokens = zip(*usages, strict=True)
+        return Usage(
+            prompt=sum(prompt_tokens),
+            completion=sum(completion_tokens),
+            total=sum(choice_tokens),
+        )

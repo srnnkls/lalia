@@ -221,5 +221,5 @@ class LLMParser:
         messages: Sequence[Message] = (),
     ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
         adapter = TypeAdapter(get_callable(function))
-        function_call_schema = get_schema(function)
+        function_call_schema = get_schema(function).to_json_schema()
         return self._parse(payload, adapter, function_call_schema, messages)

@@ -1,5 +1,7 @@
 import os
 import subprocess
+from enum import Enum
+from typing import Annotated
 
 import pytest
 
@@ -14,6 +16,7 @@ from lalia.io.renderers import TagColor
 
 OPENAI_API_KEY_REF = "ahssdo26ixj2gloto2b4z34k7u/OpenAI API Key/OPENAI_API_TOKEN"
 
+MAX_TOKEN_DEVIATION = 0.05  # relative tolerance
 
 Tag.register_key_color("user", TagColor.YELLOW)
 Tag.register_key_color("assistant", TagColor.BLUE)
@@ -69,3 +72,27 @@ def openai_api_key() -> str:
     if "OPENAI_API_KEY" in os.environ:
         return os.environ["OPENAI_API_KEY"]
     return get_op_secret(OPENAI_API_KEY_REF)
+
+
+class MyEnum(Enum):
+    OPTION1 = "option1"
+    OPTION2 = "option2"
+
+
+@pytest.fixture(scope="session")
+def foo_function():
+    def foo(
+        a: Annotated[int, "This is a integer number."],
+        b: Annotated[str | int, "This will be appended."] = "test",
+        c: Annotated[MyEnum, "This is an Enum."] = MyEnum.OPTION1,
+    ) -> str:
+        """This is a test function.
+        It combines number a, appends string b and option c."""
+        return f"{a}_{b}_{c.value}"
+
+    return foo
+
+
+@pytest.fixture(scope="session")
+def max_token_deviation():
+    return MAX_TOKEN_DEVIATION
