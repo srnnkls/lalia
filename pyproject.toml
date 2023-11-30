@@ -13,6 +13,7 @@ dependencies = [
   "rich",
   "ruamel.yaml",
   "ruamel.yaml.string",
+  "tiktoken",
 ]
 dynamic = [
   "version"
@@ -102,6 +103,9 @@ unfixable = [
 [tool.ruff.isort]
 known-first-party = ["lalia"]
 
+[tool.isort]
+profile = "black"
+
 [tool.ruff.flake8-tidy-imports]
 ban-relative-imports = "all"
 
@@ -112,6 +116,7 @@ ban-relative-imports = "all"
 [tool.pytest.ini_options]
 addopts = [
     "-m not openai",
+    "-m not exact_tokens",
 ]
 markers = [
     "openai: tests that require interactions with the openai api",

@@ -19,6 +19,13 @@ FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 logger = get_logger(__name__)
 
 
+@dataclass
+class Usage:
+    prompt: int
+    completion: int
+    total: int
+
+
 class FunctionCallDirective(StrEnum):
     NONE = "none"
     AUTO = "auto"
@@ -137,7 +144,11 @@ class OpenAIChat:
         user: str | None = None,
         timeout: int | None = None,
     ) -> ChatCompletionResponse:
-        func_schemas = [get_schema(func) for func in functions] if functions else []
+        func_schemas = (
+            [get_schema(func).to_json_schema() for func in functions]
+            if functions
+            else []
+        )
 
         raw_response = self.complete_raw(
             messages=to_raw_messages(messages),

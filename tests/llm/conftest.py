@@ -17,8 +17,7 @@ from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDire
 
 def get_restricted_schema(func):
     schema = get_schema(func)
-    restricted_schema = schema["parameters"]
-    restricted_schema["required"] = schema["required"]
+    restricted_schema = schema.to_json_schema()["parameters"]
     restricted_schema["additionalProperties"] = False
     return restricted_schema
 
@@ -31,7 +30,7 @@ def generate_function_args(func: Callable[..., Any]) -> dict[str, Any]:
         return cast(dict[str, Any], from_schema(schema).example())
 
 
-def get_function_args_strategie(func):
+def get_function_args_strategy(func):
     schema = get_restricted_schema(func)
     return from_schema(schema)
 
@@ -176,7 +175,7 @@ class FakeLLM:
             if _hypothesis_func_call_args is None:
                 args = generate_function_args(func)
             else:
-                args_strategy = get_function_args_strategie(func)
+                args_strategy = get_function_args_strategy(func)
                 args = _hypothesis_func_call_args.draw(args_strategy)
 
             function_call_response = {
