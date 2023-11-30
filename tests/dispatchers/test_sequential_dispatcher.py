@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from collections import deque
 
+from pydantic.dataclasses import dataclass
+
 from lalia.chat.completions import FinishReason
 from lalia.chat.dispatchers import DispatchCall
 from lalia.chat.messages import SystemMessage, UserMessage
 from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages.messages import UserMessage
 from lalia.chat.session import Session
 from lalia.llm.openai import ChatModel, FunctionCallDirective, OpenAIChat
 
 
+@dataclass
 class SequentialDispatcher:
     """
     Dispatches LLM function calls sequentially based on the sequence of
@@ -19,7 +21,7 @@ class SequentialDispatcher:
     Calls every function exactly once.
     """
 
-    def __init__(self):
+    def __post_init__(self):
         self._stack = deque()
         self._called = deque()
 

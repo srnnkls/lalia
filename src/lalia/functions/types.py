@@ -3,12 +3,15 @@ from __future__ import annotations
 import builtins
 from abc import ABC, abstractmethod
 from enum import StrEnum
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from pydantic import TypeAdapter, computed_field
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.finish_reason import FinishReason
+
+T = TypeVar("T")
+A = TypeVar("A")
 
 
 class TypeScriptTypes(StrEnum):
@@ -244,14 +247,14 @@ class Result:
 
 
 @dataclass
-class FunctionCallResult:
+class FunctionCallResult(Generic[A, T]):
     """
     A result type that is a superset of `Result` containg additional metadata.
     """
 
     name: str
-    arguments: dict[str, Any]
-    value: Any | None = None
+    arguments: dict[str, A]
+    value: T | None = None
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.DELEGATE
 
