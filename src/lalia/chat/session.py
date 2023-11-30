@@ -63,13 +63,9 @@ class Session:
         default_factory=lambda: SystemMessage(content="")
     )
     init_messages: Sequence[Message] = field(default_factory=list)
-<<<<<<< src/lalia/chat/session.py
-    messages: MessageBuffer = field(default_factory=MessageBuffer)
-=======
     default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
         default_factory=lambda: DEFAULT_FOLD_TAGS
     )
->>>>>>> src/lalia/chat/session.py
     functions: Sequence[Callable[..., Any]] = ()
     failure_messages: Sequence[Message] = field(
         default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
@@ -78,7 +74,7 @@ class Session:
         default_factory=dispatchers.NopDispatcher
     )
     storage_backend: StorageBackend[UUID4] = Field(
-        DictStorageBackend[UUID4](), exclude=True
+        default=DictStorageBackend[UUID4](), exclude=True
     )
     autocommit: bool = True
     memory: int = 100
