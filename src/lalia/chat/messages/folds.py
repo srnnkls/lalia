@@ -5,7 +5,9 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import field
 from itertools import chain
+from typing import Any
 
+from pydantic import field_serializer, field_validator
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.messages.fold_state import FoldState
@@ -16,6 +18,7 @@ from lalia.chat.messages.tags import (
     TagPattern,
     convert_tag_like,
 )
+from lalia.io.serialization.functions import parse_callable, serialize_callable
 
 DEFAULT_FOLD_TAGS = {TagPattern("error", ".*")}
 
@@ -38,9 +41,9 @@ def derive_tag_predicate(
         case Tag() | TagPattern():
             return PredicateRegistry.derive_predicate(tags)
         case set() as tag_likes:
-            tags_ = convert_tag_like(tag_likes)
             return lambda message_tags: all(
-                PredicateRegistry.derive_predicate(tag)(message_tags) for tag in tags_
+                PredicateRegistry.derive_predicate(tag)(message_tags)
+                for tag in tag_likes
             )
         case Callable() as predicate:
             return predicate
@@ -64,6 +67,38 @@ class Folds:
     default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
         default_factory=lambda: DEFAULT_FOLD_TAGS
     )
+
+    @field_serializer("default_fold_tags")
+    def serialize_default_fold_tags(
+        self, tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
+    ) -> list[Tag | TagPattern] | dict[str, Any]:
+        if not callable(tags):
+            return list(tags)
+        if callable(callable_ := tags):
+            return serialize_callable(callable_)
+        raise AssertionError("Unreachable")
+
+    @field_validator("default_fold_tags", mode="before")
+    @classmethod
+    def _parse_default_fold_tags(
+        cls,
+        tags: set[Tag]
+        | set[TagPattern]
+        | Callable[[set[Tag]], bool]
+        | list[dict[str, Any]]  # serialized tags
+        | dict[str, Any],  # serialized callable
+    ) -> set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]:
+        match tags:
+            case set() as tags:
+                return tags
+            case Callable() as callable_:
+                return callable_
+            case list() as tags:
+                return {TagPattern(**tag) for tag in tags}
+            case dict() as callable_:
+                return parse_callable(callable_)
+            case _:
+                raise TypeError(f"Unsupported type for tags: '{type(tags).__name__}'")
 
     def __post_init__(self):
         self._folds: list[Fold] = []

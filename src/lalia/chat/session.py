@@ -4,8 +4,9 @@ import json
 from collections.abc import Callable, Sequence
 from dataclasses import field
 from typing import Any
+from uuid import uuid4
 
-from pydantic import ConfigDict, field_validator
+from pydantic import UUID4, ConfigDict, Field, field_serializer, field_validator
 from pydantic.dataclasses import dataclass
 
 from lalia.chat import dispatchers
@@ -21,8 +22,19 @@ from lalia.chat.messages import (
 )
 from lalia.chat.messages.buffer import DEFAULT_FOLD_TAGS, MessageBuffer
 from lalia.chat.messages.tags import Tag, TagPattern
-from lalia.functions import Error, FunctionCallResult, execute_function_call, get_name
+from lalia.functions import (
+    Error,
+    FunctionCallResult,
+    execute_function_call,
+    get_name,
+)
 from lalia.io.logging import get_logger
+from lalia.io.serialization.functions import (
+    CallableRegistry,
+    parse_callables,
+    serialize_callables,
+)
+from lalia.io.storage import DictStorageBackend, StorageBackend
 from lalia.llm import LLM
 from lalia.llm.openai import Choice
 
@@ -40,22 +52,33 @@ ARGUMENT_PARSING_FAILURE_MESSAGE_TEMPLATE = (
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
 
-@dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
+@dataclass(
+    kw_only=True,
+    config=ConfigDict(arbitrary_types_allowed=True),
+)
 class Session:
     llm: LLM
+    session_id: UUID4 = field(default_factory=uuid4)
     system_message: SystemMessage | str = field(
         default_factory=lambda: SystemMessage(content="")
     )
     init_messages: Sequence[Message] = field(default_factory=list)
+<<<<<<< src/lalia/chat/session.py
+    messages: MessageBuffer = field(default_factory=MessageBuffer)
+=======
     default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
         default_factory=lambda: DEFAULT_FOLD_TAGS
     )
+>>>>>>> src/lalia/chat/session.py
     functions: Sequence[Callable[..., Any]] = ()
     failure_messages: Sequence[Message] = field(
         default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
     )
     dispatcher: dispatchers.Dispatcher = field(
-        default_factory=dispatchers.FunctionsDispatcher
+        default_factory=dispatchers.NopDispatcher
+    )
+    storage_backend: StorageBackend[UUID4] = Field(
+        DictStorageBackend[UUID4](), exclude=True
     )
     autocommit: bool = True
     memory: int = 100
@@ -64,14 +87,36 @@ class Session:
     rollback_on_error: bool = True
     verbose: bool = False
 
+    @field_serializer("functions")
+    def serialize_functions(
+        self, functions: Sequence[Callable[..., Any]]
+    ) -> list[dict[str, Any]]:
+        return serialize_callables(functions)
+
+    @field_validator("functions", mode="before")
+    @classmethod
+    def parse_functions(
+        cls, functions: Sequence[Callable[..., Any]] | Sequence[dict[str, Any]]
+    ) -> list[Callable[..., Any]]:
+        return parse_callables(functions)
+
     @field_validator("system_message", mode="before")
     @classmethod
     def parse_system_message(cls, message: str | SystemMessage) -> SystemMessage:
         return SystemMessage(content=message) if isinstance(message, str) else message
 
+    @classmethod
+    def from_storage(cls, session_id: UUID4, llm: LLM, **kwargs) -> Session:
+        instance = cls(llm=llm)
+        instance.load(id_=session_id, **kwargs)
+        return instance
+
     def __post_init__(self):
         if isinstance(self.system_message, str):
             self.system_message = SystemMessage(content=self.system_message)
+
+        for func in self.functions:
+            CallableRegistry.register_callable(func)
 
         self.messages = MessageBuffer(
             [
@@ -356,9 +401,19 @@ class Session:
     def commit(self):
         self.messages.commit()
 
+    def load(self, session_id: UUID4, **kwargs):
+        arguments = self.storage_backend.load(session_id)
+        # currently, llms are not serialized
+        if "llm" not in kwargs:
+            arguments["llm"] = self.llm
+        arguments.update(kwargs)
+        validated_arguments = vars(type(self)(**arguments))
+        vars(self).update(validated_arguments)
+
     def reset(self):
         self.messages.clear()
-        self.messages.messages = [self.system_message, *self.init_messages]
+        self.messages.add(self.system_message)  # type: ignore
+        self.messages.add_messages(self.init_messages)
 
         self.dispatcher.reset()
 
@@ -369,3 +424,6 @@ class Session:
         self.messages.rollback()
 
         self.dispatcher.reset()
+
+    def save(self):
+        self.storage_backend.save(self, self.session_id)

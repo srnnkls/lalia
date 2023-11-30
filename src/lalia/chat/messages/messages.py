@@ -6,8 +6,9 @@ from dataclasses import asdict, field
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import TypeAdapter, field_validator
 from pydantic.dataclasses import dataclass
+from pydantic.functional_serializers import model_serializer
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
@@ -99,6 +100,10 @@ class SystemMessage:
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: set[Tag] = field(default_factory=set)
 
+    @model_serializer
+    def serialize_message(self) -> dict[str, Any]:
+        return asdict(self.to_base_message())
+
     @field_validator("tags", mode="before")
     @classmethod
     def _parse_tags(
@@ -122,6 +127,10 @@ class UserMessage:
     content: str
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: set[Tag] = field(default_factory=set)
+
+    @model_serializer
+    def serialize_message(self) -> dict[str, Any]:
+        return asdict(self.to_base_message())
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -167,6 +176,10 @@ class AssistantMessage:
     function_call: FunctionCall | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: set[Tag] = field(default_factory=set)
+
+    @model_serializer
+    def serialize_message(self) -> dict[str, Any]:
+        return asdict(self.to_base_message())
 
     @field_validator("function_call", mode="before")
     @classmethod
@@ -215,6 +228,10 @@ class FunctionMessage:
     result: FunctionCallResult | None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: set[Tag] = field(default_factory=set)
+
+    @model_serializer
+    def serialize_message(self) -> dict[str, Any]:
+        return self.to_base_message().to_raw_message()
 
     @field_validator("tags", mode="before")
     @classmethod

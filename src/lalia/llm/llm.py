@@ -1,6 +1,8 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from pydantic.dataclasses import dataclass
+
 from lalia.chat.messages import Message
 from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDirective
 

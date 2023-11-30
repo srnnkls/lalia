@@ -3,48 +3,62 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import KW_ONLY, InitVar, field
 from itertools import chain
+from typing import Any, ClassVar
+from uuid import uuid4
 
+from pydantic import UUID4, field_validator
+from pydantic.dataclasses import dataclass
 from rich.console import Console
 
 from lalia.chat.messages.folds import DEFAULT_FOLD_TAGS, Folds, derive_tag_predicate
-from lalia.chat.messages.messages import Message
+from lalia.chat.messages.messages import BaseMessage, Message
 from lalia.chat.messages.tags import (
     Tag,
     TagPattern,
 )
 from lalia.io.logging import get_logger
 from lalia.io.renderers import MessageBufferRender
+from lalia.io.storage import DictStorageBackend, StorageBackend
 
 console = Console()
 
 logger = get_logger(__name__)
 
 
+@dataclass
 class MessageBuffer(Sequence[Message]):
-    def __init__(
-        self,
-        messages: Sequence[Message] = (),
-        pending: Sequence[Message] = (),
-        folds: Folds | None = None,
-        *,
-        verbose=False,
-        default_fold_tags: set[Tag]
-        | set[TagPattern]
-        | Callable[[set[Tag]], bool] = DEFAULT_FOLD_TAGS,
-    ):
-        self.messages = list(messages)
-        self.pending = list(pending)
+    messages: list[Message] = field(default_factory=list)
+    _: KW_ONLY
+    pending: list[Message] = field(default_factory=list)
+    folds: Folds = field(default_factory=Folds)
+    default_fold_tags: InitVar[
+        set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
+    ] = DEFAULT_FOLD_TAGS
+    verbose: bool = False
+
+    @field_validator("messages", "pending", mode="before")
+    @classmethod
+    def parse_mesages(
+        cls, messages: list[Message | BaseMessage | dict[str, Any]]
+    ) -> list[Message]:
+        parsed_messages = []
+        for message in messages:
+            match message:
+                case BaseMessage():
+                    parsed_messages.append(message.parse())
+                case dict():
+                    parsed_messages.append(BaseMessage(**message).parse())
+                case _:
+                    parsed_messages.append(message)
+        return parsed_messages
+
+    def __post_init__(self, default_fold_tags):
         self._default_fold_tags = default_fold_tags
-        if folds is None:
-            self.folds = Folds.from_messages(
-                messages, pending, default_fold_tags=default_fold_tags
-            )
-        else:
-            folds.update(messages, pending)
-            self.folds = folds
+        self.folds.default_fold_tags = default_fold_tags
+        self.folds.update(self.messages, self.pending)
         self._transactional_bounds: list[tuple[int, int]] = []
-        self.verbose = verbose
 
     def __contains__(self, message: Message) -> bool:
         return message in (*self.messages, *self.pending)
@@ -57,7 +71,7 @@ class MessageBuffer(Sequence[Message]):
         yield from chain(messages, pending)
 
     def __len__(self) -> int:
-        return len(self.messages + self.pending)
+        return len(self.messages) + len(self.pending)
 
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
@@ -97,20 +111,6 @@ class MessageBuffer(Sequence[Message]):
         self.messages.extend(self.pending)
         self.pending = []
         self.folds.commit()
-
-    @property
-    def default_fold_tags(
-        self,
-    ) -> set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]:
-        return self._default_fold_tags
-
-    @default_fold_tags.setter
-    def default_fold_tags(
-        self, default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
-    ):
-        self._default_fold_tags = default_fold_tags
-        self.folds.default_fold_tags = default_fold_tags
-        self.folds.update(self.messages, self.pending)
 
     @contextmanager
     def expand(
