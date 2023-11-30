@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import Annotated, Any, get_origin, get_type_hints
+from types import BuiltinFunctionType, FunctionType
+from typing import (
+    Annotated,
+    Any,
+    Generic,
+    ParamSpec,
+    TypeVar,
+    get_origin,
+    get_type_hints,
+)
 
 from jsonref import replace_refs
 from pydantic import TypeAdapter, ValidationError, validate_call
@@ -26,6 +35,11 @@ from lalia.io.logging import get_logger
 logger = get_logger(__name__)
 
 
+T = TypeVar("T")
+A = TypeVar("A")
+P = ParamSpec("P")
+
+
 def dereference_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
@@ -34,13 +48,13 @@ def dereference_schema(schema: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def get_name(callable_: Callable[..., Any]) -> str:
+def get_name(callable_: Callable[P, Any]) -> str:
     if is_callable_instance(callable_):
         return getattr(callable_, "name", type(callable_).__name__)
     return callable_.__name__
 
 
-def get_callable(callable_: Callable[..., Any]) -> Callable[..., Any]:
+def get_callable(callable_: Callable[P, T]) -> Callable[P, T]:
     if is_callable_instance(callable_):
         return callable_.__call__
     return callable_
@@ -113,8 +127,8 @@ def get_schema(
 
 
 def execute_function_call(
-    func: Callable[..., Any], arguments: dict[str, Any]
-) -> FunctionCallResult:
+    func: Callable[..., T], arguments: dict[str, A]
+) -> FunctionCallResult[A, T]:
     func_with_validation = validate_call(get_callable(func))
     try:
         result = func_with_validation(**arguments)
