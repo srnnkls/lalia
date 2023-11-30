@@ -57,6 +57,7 @@ class DispatchCall:
 
 
 @runtime_checkable
+@dataclass
 class Dispatcher(Protocol):
     def dispatch(self, session: Session) -> DispatchCall:
         ...
@@ -65,7 +66,8 @@ class Dispatcher(Protocol):
         ...
 
 
-class FunctionsDispatcher:
+@dataclass
+class NopDispatcher:
     def dispatch(self, session: Session) -> DispatchCall:
         return DispatchCall(
             callback=session.llm.complete,

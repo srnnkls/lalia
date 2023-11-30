@@ -3,11 +3,13 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
+from dataclasses import InitVar, field
 from enum import StrEnum
-from typing import ClassVar, TypeGuard, cast
+from typing import ClassVar, Generic, TypeGuard, TypeVar, cast
 
 from pydantic import Field, ValidationInfo, field_validator, validate_call
 from pydantic.dataclasses import dataclass
+from pydantic.functional_serializers import model_serializer
 
 from lalia.io.renderers import TagColor, TagRenderer
 
@@ -233,11 +235,8 @@ class Tag:
 
 @dataclass(frozen=True)
 class TagPattern:
-    key: re.Pattern | str
-    value: re.Pattern | str
-
-    def __iter__(self) -> Iterator[re.Pattern]:
-        yield from (cast(re.Pattern, self.key), cast(re.Pattern, self.value))
+    key: str | re.Pattern
+    value: str | re.Pattern
 
     @classmethod
     def from_dict(cls, tag: dict[str | re.Pattern, str | re.Pattern]) -> TagPattern:
@@ -272,10 +271,18 @@ class TagPattern:
 
     @field_validator("key", "value", mode="before")
     @classmethod
-    def parse_value(cls, val: str | re.Pattern) -> re.Pattern:
-        if isinstance(val, str):
-            return re.compile(val)
-        return val
+    def parse_field(cls, value: str | re.Pattern) -> re.Pattern:
+        if isinstance(value, str):
+            return re.compile(value)
+        return value
+
+    @model_serializer
+    def serialize_tag_pattern(self) -> dict[str, str]:
+        key_pattern, value_pattern = (cast(re.Pattern, value) for value in self)
+        return {"key": key_pattern.pattern, "value": value_pattern.pattern}
+
+    def __iter__(self) -> Iterator[re.Pattern]:
+        yield from (cast(re.Pattern, self.key), cast(re.Pattern, self.value))
 
     def __and__(self, other: Tag | TagPattern | _PredicateOperator) -> _And:
         match other:
@@ -304,3 +311,6 @@ class TagPattern:
             f"Unsupported operand type(s) for |: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
         )
+
+
+TagPattern("key", "value")
