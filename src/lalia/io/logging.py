@@ -166,6 +166,8 @@ def _create_logger(
 
     logger.propagate = False
 
+    LoggerRegistry.register(name, logger)
+
     return logger
 
 
