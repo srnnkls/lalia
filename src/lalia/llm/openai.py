@@ -194,7 +194,6 @@ class OpenAIChat:
         params = {
             "messages": messages,
             "model": model,
-            "logit_bias": logit_bias,
             "max_tokens": max_tokens,
             "n": n_choices,
             "seed": seed,
@@ -203,6 +202,9 @@ class OpenAIChat:
             "top_p": top_p,
             "timeout": timeout,
         }
+
+        if logit_bias is not None:
+            params["logit_bias"] = logit_bias
 
         if functions:
             params["functions"] = functions
