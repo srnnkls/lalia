@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from enum import StrEnum
 from typing import Any, ClassVar
 
@@ -95,15 +95,25 @@ class LoggerRegistry:
 
 class LogRecord(logging.LogRecord):
     def getMessage(self) -> str:
+        def prettify_arg(arg: Any, spec: FormatTypeSpec) -> str | object:
+            if spec == FormatTypeSpec.STRING:
+                return pretty_repr(arg)
+            else:
+                return arg
+
         def prettify_str_spec_args(message: str, args: Any) -> Iterator[str | object]:
-            format_type_specs = (
-                match.group(1) for match in C_FORMAT_STRING_REGEX.finditer(message)
-            )
+            format_type_specs = [
+                FormatTypeSpec(match.group(1))
+                for match in C_FORMAT_STRING_REGEX.finditer(message)
+            ]
+            # work around special handling of Mappings in LogRecords:
+            # https://github.com/python/cpython/blob/707c37e373d7ea4e3f06b24c719fa45f70fbfa49/Lib/logging/__init__.py#L307
+            if len(format_type_specs) == 1 and isinstance(args, Mapping):
+                yield prettify_arg(args, FormatTypeSpec.STRING)
+                return
+
             for spec, arg in zip(format_type_specs, args, strict=True):
-                if spec == FormatTypeSpec.STRING:
-                    yield pretty_repr(arg)
-                else:
-                    yield arg
+                yield prettify_arg(arg, spec)
 
         if isinstance(self.msg, str) and self.args:
             args_formatted = prettify_str_spec_args(self.msg, self.args)
