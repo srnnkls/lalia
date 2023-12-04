@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from types import BuiltinFunctionType, FunctionType
 from typing import (
     Annotated,
     Any,
-    Generic,
     ParamSpec,
     TypeVar,
     get_origin,
