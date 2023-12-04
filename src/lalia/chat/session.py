@@ -102,9 +102,15 @@ class Session:
         return SystemMessage(content=message) if isinstance(message, str) else message
 
     @classmethod
-    def from_storage(cls, session_id: UUID4, llm: LLM, **kwargs) -> Session:
-        instance = cls(llm=llm)
-        instance.load(id_=session_id, **kwargs)
+    def from_storage(
+        cls,
+        session_id: UUID4,
+        storage_backend: StorageBackend[UUID4],
+        llm: LLM,
+        **kwargs,
+    ) -> Session:
+        instance = cls(llm=llm, storage_backend=storage_backend)
+        instance.load(session_id=session_id, **kwargs)
         return instance
 
     def __post_init__(self):
