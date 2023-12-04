@@ -13,6 +13,8 @@ from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_mess
 from lalia.functions import get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
+from lalia.llm.budgeting.token_counter import budget_and_truncate_message_buffer
+from lalia.llm.models import ChatModel, FunctionCallDirective
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
@@ -26,18 +28,8 @@ class Usage:
     total: int
 
 
-class FunctionCallDirective(StrEnum):
-    NONE = "none"
-    AUTO = "auto"
-
-
 class ChatCompletionObject(StrEnum):
     CHAT_COMPLETION = "chat.completion"
-
-
-class ChatModel(StrEnum):
-    GPT_3_5_TURBO_0613 = "gpt-3.5-turbo-0613"
-    GPT_4_0613 = "gpt-4-0613"
 
 
 @dataclass
@@ -125,7 +117,7 @@ class OpenAIChat:
     def complete(
         self,
         messages: Sequence[Message],
-        model: ChatModel | None = None,
+        model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
         functions: Sequence[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
@@ -148,6 +140,11 @@ class OpenAIChat:
             [get_schema(func).to_json_schema() for func in functions]
             if functions
             else []
+        )
+
+        # TODO: make completion_buffer dynamic
+        messages = budget_and_truncate_message_buffer(
+            messages, token_threshold=model.token_limit, completion_buffer=100
         )
 
         raw_response = self.complete_raw(
