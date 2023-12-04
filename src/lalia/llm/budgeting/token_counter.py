@@ -1,13 +1,15 @@
 import json
+from collections import deque
 from collections.abc import Callable, Sequence
 from enum import IntEnum
 
 import tiktoken
 
 from lalia.chat.messages.buffer import MessageBuffer
+from lalia.chat.messages.messages import Message
 from lalia.formatting import format_function_as_typescript
 from lalia.functions import FunctionCallResult, Result
-from lalia.llm.openai import ChatModel, FunctionCallDirective
+from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
 class Overhead(IntEnum):
@@ -40,7 +42,8 @@ def get_tokens(
 
 
 def estimate_tokens_in_messages(
-    messages: MessageBuffer, model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    messages: MessageBuffer | Sequence[Message],
+    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
     message_tokens = []
 
@@ -112,7 +115,7 @@ def estimate_tokens_in_functions(
 
 
 def estimate_token_count(
-    messages: MessageBuffer,
+    messages: MessageBuffer | Sequence[Message],
     functions: Sequence[Callable[[...], Result | FunctionCallResult | str]] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
@@ -144,3 +147,24 @@ def estimate_token_count(
             tokens.append(get_tokens(function_call.name, Overhead.FUNCTION_NAME, model))
 
     return sum(tokens)
+
+
+def budget_and_truncate_message_buffer(
+    messages: MessageBuffer | Sequence[Message],
+    token_threshold: int,
+    completion_buffer: int,
+    functions: Sequence[Callable[[...], Result | FunctionCallResult | str]] = (),
+) -> deque[Message]:
+    max_tokens_usable = token_threshold - completion_buffer
+    current_tokens = estimate_token_count(messages, functions)
+
+    truncated_messages = deque(messages)
+    while current_tokens > max_tokens_usable:
+        if not truncated_messages:
+            raise ValueError(
+                "All messages folded. Remove functions or increase token threshold."
+            )
+        truncated_messages.popleft()
+        current_tokens = estimate_token_count(truncated_messages, functions)
+
+    return truncated_messages

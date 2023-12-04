@@ -115,9 +115,9 @@ ban-relative-imports = "all"
 
 [tool.pytest.ini_options]
 addopts = [
-    "-m not openai",
-    "-m not exact_tokens",
+    "-m not openai and not exact_tokens",
 ]
 markers = [
     "openai: tests that require interactions with the openai api",
+    "exact_tokens: tests that require exact token counts",
 ]
