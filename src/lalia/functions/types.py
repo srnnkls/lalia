@@ -76,33 +76,36 @@ class BaseProp(ABC):
         return cls(**schema)
 
     @classmethod
-    def parse_type_and_description(cls, param_type, description, enum, default):
+    def parse_type_and_description(cls, param_info: dict[str, Any]):
         # catch the case where the parameter is a variant
-        if "|" in param_type:
-            type_parts = [t.strip().replace('"', "") for t in param_type.split("|")]
-            variant_props = [
-                cls.parse_type_and_description(t, description, enum, default)
-                for t in type_parts
-            ]
-            return VariantProp(
-                description=description, anyof=variant_props, default=default
-            )
 
-        match param_type:
-            case "string":
-                return StringProp(description=description, enum=enum, default=default)
-            case "number" | "integer":
-                return NumberProp(description=description, enum=enum, default=default)
-            case "boolean":
-                return BoolProp(description=description, default=default)
-            case "array":
-                return ArrayProp(description=description, default=default)
-            case "object":
-                return ObjectProp(description=description, default=default)
-            case "null":
-                return NullProp(description=description)
-            case _:
-                raise ValueError(f"Unknown type: {param_type}")
+        if "type" in param_info:
+            match param_info["type"]:
+                case "string":
+                    return StringProp(**param_info)
+                case "number" | "integer":
+                    return NumberProp(**param_info)
+                case "boolean":
+                    return BoolProp(**param_info)
+                case "array":
+                    return ArrayProp(**param_info)
+                case "object":
+                    return ObjectProp(**param_info)
+                case "null":
+                    return NullProp(**param_info)
+        else:
+            if "anyOf" in param_info:
+                return VariantProp(anyof=param_info["anyOf"])
+            if "allOf" in param_info:
+                sub_schema = next(iter(param_info["allOf"]))
+                match sub_schema["type"]:
+                    case "string":
+                        return StringProp(**sub_schema)
+                    case "number" | "integer":
+                        return NumberProp(**sub_schema)
+                raise NotImplementedError("Subschema type not implemented")
+
+        raise ValueError(f"Unknown parameter: {param_info}")
 
 
 @dataclass

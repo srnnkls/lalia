@@ -23,11 +23,7 @@ from lalia.functions.types import (
     Result,
     ReturnType,
 )
-from lalia.functions.utils import (
-    extract_enum,
-    extract_param_type,
-    is_callable_instance,
-)
+from lalia.functions.utils import is_callable_instance
 from lalia.io.logging import get_logger
 
 logger = get_logger(__name__)
@@ -75,19 +71,14 @@ def get_schema(
         raise ValueError(f"Not a callable: {callable_}")
 
     adapter = TypeAdapter(validate_call(func))
-    func_schema = adapter.json_schema()
+    func_schema = dereference_schema(adapter.json_schema())
 
     properties = {}
     required_params = []
 
     for param_name, param_info in func_schema["properties"].items():
-        param_type = extract_param_type(param_info, param_name, func_schema)
-        param_enum = extract_enum(func_schema, param_name)
-
         if "required" in func_schema and param_name in func_schema["required"]:
             required_params.append(param_name)
-
-        default = param_info["default"] if "default" in param_info else None
 
         type_hints = get_type_hints(func, include_extras=True)
         annotation = type_hints.get(param_name)
@@ -96,9 +87,8 @@ def get_schema(
         else:
             description = ""
 
-        properties[param_name] = BaseProp.parse_type_and_description(
-            param_type, description, param_enum, default
-        )
+        properties[param_name] = BaseProp.parse_type_and_description(param_info)
+        properties[param_name].description = description
 
     # TODO: ObjectProp needs to get VariantProp too
     function_parameters = ObjectProp(
