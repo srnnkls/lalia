@@ -66,6 +66,7 @@ class Session:
     default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
         default_factory=lambda: DEFAULT_FOLD_TAGS
     )
+    messages: MessageBuffer = field(default_factory=MessageBuffer)
     functions: Sequence[Callable[..., Any]] = ()
     failure_messages: Sequence[Message] = field(
         default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
@@ -120,14 +121,15 @@ class Session:
         for func in self.functions:
             CallableRegistry.register_callable(func)
 
-        self.messages = MessageBuffer(
-            [
-                self.system_message,
-                *self.init_messages,
-            ],
-            verbose=self.verbose,
-            default_fold_tags=self.default_fold_tags,
-        )
+        if not self.messages:
+            self.messages = MessageBuffer(
+                [
+                    self.system_message,
+                    *self.init_messages,
+                ],
+                verbose=self.verbose,
+                default_fold_tags=self.default_fold_tags,
+            )
 
     def __call__(self, user_input: str = "") -> Message:
         try:
@@ -408,6 +410,8 @@ class Session:
         # currently, llms are not serialized
         if "llm" not in kwargs:
             arguments["llm"] = self.llm
+        if "storage_backend" not in kwargs:
+            arguments["storage_backend"] = self.storage_backend
         arguments.update(kwargs)
         validated_arguments = vars(type(self)(**arguments))
         vars(self).update(validated_arguments)
