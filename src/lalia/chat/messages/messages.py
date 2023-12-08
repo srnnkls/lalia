@@ -6,7 +6,7 @@ from dataclasses import asdict, field
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import TypeAdapter, field_validator
+from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 from pydantic.functional_serializers import model_serializer
 from ruamel.yaml import YAML
@@ -29,9 +29,10 @@ def _parse_tags(
             return {Tag(*tag) for tag in tags if isinstance(tag, tuple)} | {
                 tag for tag in tags if isinstance(tag, Tag)
             }
-        case list(dict() as tags_raw):
+        case list(tags_raw):
             return {Tag.from_dict(tag) for tag in tags_raw}
-    raise ValueError(f"Unsupported type for tags: {type(tags).__name__}")
+        case _:
+            return set()
 
 
 def to_raw_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
@@ -44,6 +45,7 @@ class BaseMessage:
     name: str | None = None
     content: str | None = None
     function_call: dict[str, Any] | None = None
+    tags: list[dict[str, str]] = field(default_factory=list)
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 
     def _parse_no_content_case(self) -> Message:
@@ -59,14 +61,16 @@ class BaseMessage:
                     "Messages without `content` must be of role `assistant`"
                 )
 
-    def _parse_content_case(self, content: str) -> Message:
+    def _parse_content_case(self, content: str, tags: list[dict[str, str]]) -> Message:
         match self.role:
             case Role.SYSTEM:
-                return SystemMessage(content=content)
+                return SystemMessage(content=content, tags={Tag(**tag) for tag in tags})
             case Role.USER:
-                return UserMessage(content=content)
+                return UserMessage(content=content, tags={Tag(**tag) for tag in tags})
             case Role.ASSISTANT:
-                return AssistantMessage(content=content)
+                return AssistantMessage(
+                    content=content, tags={Tag(**tag) for tag in tags}
+                )
             case Role.FUNCTION:
                 if self.name is None:
                     raise ValueError("FunctionMessages must have a `name` attribute")
@@ -74,6 +78,7 @@ class BaseMessage:
                     name=self.name,
                     content=content,
                     result=FunctionCallResult(name=self.name, arguments={}),
+                    tags={Tag(**tag) for tag in tags},
                 )
             case _:
                 raise ValueError(f"Unsupported role: {self.role}")
@@ -83,7 +88,7 @@ class BaseMessage:
             case None:
                 return self._parse_no_content_case()
             case content:
-                return self._parse_content_case(content)
+                return self._parse_content_case(content, self.tags)
 
     def to_raw_message(self) -> dict[str, Any]:
         return {
@@ -118,7 +123,10 @@ class SystemMessage:
 
     def to_base_message(self) -> BaseMessage:
         return BaseMessage(
-            role=Role.SYSTEM, content=self.content, timestamp=self.timestamp
+            role=Role.SYSTEM,
+            content=self.content,
+            timestamp=self.timestamp,
+            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
         )
 
 
@@ -146,7 +154,10 @@ class UserMessage:
 
     def to_base_message(self) -> BaseMessage:
         return BaseMessage(
-            role=Role.USER, content=self.content, timestamp=self.timestamp
+            role=Role.USER,
+            content=self.content,
+            timestamp=self.timestamp,
+            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
         )
 
 
@@ -217,6 +228,7 @@ class AssistantMessage:
             role=Role.ASSISTANT,
             content=self.content,
             function_call=f_call,
+            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
             timestamp=self.timestamp,
         )
 
@@ -248,6 +260,7 @@ class FunctionMessage:
             role=Role.FUNCTION,
             name=self.name,
             content=self.content,
+            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
             timestamp=self.timestamp,
         )
 

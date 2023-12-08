@@ -100,7 +100,7 @@ def estimate_tokens_in_messages(
 
 
 def estimate_tokens_in_functions(
-    functions: Sequence[Callable[[...], Result | FunctionCallResult | str]],
+    functions: Sequence[Callable[..., Result | FunctionCallResult | str]],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
     include_function_return_types: bool = False,
 ) -> int:
@@ -116,7 +116,7 @@ def estimate_tokens_in_functions(
 
 def estimate_token_count(
     messages: MessageBuffer | Sequence[Message],
-    functions: Sequence[Callable[[...], Result | FunctionCallResult | str]] = (),
+    functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
     include_function_return_types: bool = False,
@@ -153,7 +153,7 @@ def budget_and_truncate_message_buffer(
     messages: MessageBuffer | Sequence[Message],
     token_threshold: int,
     completion_buffer: int,
-    functions: Sequence[Callable[[...], Result | FunctionCallResult | str]] = (),
+    functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
 ) -> deque[Message]:
     max_tokens_usable = token_threshold - completion_buffer
     current_tokens = estimate_token_count(messages, functions)
