@@ -22,7 +22,7 @@ class LLMCallback(Protocol):
     def __call__(
         self,
         messages: Sequence[Message],
-        model: ChatModel | None = None,
+        model: ChatModel,
         functions: Sequence[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
@@ -47,7 +47,7 @@ class LLMCallback(Protocol):
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class DispatchCall:
     callback: LLMCallback
-    messages: MessageBuffer
+    messages: Sequence[Message] = field(default_factory=list)
     context: set[TagPattern] = field(default_factory=set)
     params: dict[str, Any] = field(default_factory=dict)
     finish_reason: FinishReason = FinishReason.DELEGATE

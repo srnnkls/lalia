@@ -1,18 +1,18 @@
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic.dataclasses import dataclass
-
 from lalia.chat.messages import Message
 from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDirective
 
 
 @runtime_checkable
 class LLM(Protocol):
+    model: ChatModel
+
     def complete(
         self,
         messages: Sequence[Message],
-        model: ChatModel | None = None,
+        model: ChatModel,
         functions: Sequence[Callable[..., Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
@@ -36,7 +36,7 @@ class LLM(Protocol):
     def complete_raw(
         self,
         messages: Sequence[dict[str, Any]],
-        model: ChatModel | None = None,
+        model: ChatModel,
         functions: Sequence[dict[str, Any]] | None = None,
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,

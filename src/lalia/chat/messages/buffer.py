@@ -5,10 +5,9 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import KW_ONLY, InitVar, field
 from itertools import chain
-from typing import Any, ClassVar
-from uuid import uuid4
+from typing import Any
 
-from pydantic import UUID4, field_validator
+from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 
@@ -20,7 +19,6 @@ from lalia.chat.messages.tags import (
 )
 from lalia.io.logging import get_logger
 from lalia.io.renderers import MessageBufferRender
-from lalia.io.storage import DictStorageBackend, StorageBackend
 
 console = Console()
 

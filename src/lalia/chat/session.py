@@ -32,6 +32,7 @@ from lalia.io.logging import get_logger
 from lalia.io.serialization.functions import (
     CallableRegistry,
     parse_callables,
+    serialize_callable,
     serialize_callables,
 )
 from lalia.io.storage import DictStorageBackend, StorageBackend
@@ -89,6 +90,16 @@ class Session:
         self, functions: Sequence[Callable[..., Any]]
     ) -> list[dict[str, Any]]:
         return serialize_callables(functions)
+
+    @field_serializer("default_fold_tags")
+    def serialize_default_fold_tags(
+        self, tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
+    ) -> list[Tag | TagPattern] | dict[str, Any]:
+        if not callable(tags):
+            return list(tags)
+        if callable(callable_ := tags):
+            return serialize_callable(callable_)
+        raise AssertionError("Unreachable")
 
     @field_validator("functions", mode="before")
     @classmethod
