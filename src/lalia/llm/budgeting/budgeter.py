@@ -1,8 +1,19 @@
+from collections import deque
+from collections.abc import Callable, Sequence
 from enum import StrEnum
+from typing import Any, overload
 
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic.dataclasses import dataclass
 from tiktoken import encoding_name_for_model, get_encoding
 
+from lalia.chat.messages.buffer import MessageBuffer
+from lalia.chat.messages.messages import Message
+from lalia.functions.types import FunctionCallResult, Result
+from lalia.llm.budgeting.token_counter import (
+    estimate_token_count,
+    truncate_messages_or_buffer,
+)
 from lalia.llm.models import ChatModel
 
 
@@ -40,3 +51,57 @@ class Encoder:
             return self.encoder.decode(tokens)
         except Exception as e:
             raise ValueError(f"Decoding failed with error: {e}") from e
+
+
+@dataclass
+class Budgeter:
+    token_threshold: int = Field(default=0, gt=0)
+    completion_buffer: int = Field(default=0, gt=0)
+    model: ChatModel | str = ChatModel.GPT_3_5_TURBO_0613
+
+    def __post_init__(self):
+        self.encoder = Encoder.from_model(self.model)
+
+    @field_validator("completion_buffer")
+    @classmethod
+    def check_completion_buffer(cls, buffer: Any, info: ValidationInfo) -> None:
+        data = info.data
+        if "token_threshold" in data and buffer > data["token_threshold"]:
+            raise ValueError("Completion buffer cannot exceed token threshold.")
+
+    def count_tokens(
+        self,
+        messages: MessageBuffer | Sequence[Message | dict[str, Any]],
+        functions: Sequence[
+            Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
+        ] = (),
+    ) -> int:
+        return estimate_token_count(messages, functions)
+
+    @overload
+    def truncate(
+        self,
+        messages: Sequence[dict[str, Any]],
+        functions: Sequence[dict[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        ...
+
+    @overload
+    def truncate(
+        self,
+        messages: MessageBuffer | Sequence[Message],
+        functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
+    ) -> list[Message]:
+        ...
+
+    def truncate(
+        self,
+        messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
+        functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
+    ) -> list[Message] | list[dict[str, Any]]:
+        return truncate_messages_or_buffer(
+            messages=messages,
+            token_threshold=self.token_threshold,
+            completion_buffer=self.completion_buffer,
+            functions=functions,
+        )
