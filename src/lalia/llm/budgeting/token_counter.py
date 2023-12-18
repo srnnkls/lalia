@@ -2,13 +2,22 @@ import json
 from collections import deque
 from collections.abc import Callable, Sequence
 from enum import IntEnum
+from typing import Any, overload
 
 import tiktoken
 
 from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages.messages import Message
+from lalia.chat.messages.messages import (
+    AssistantMessage,
+    BaseMessage,
+    FunctionMessage,
+    Message,
+    SystemMessage,
+    UserMessage,
+)
 from lalia.formatting import format_function_as_typescript
-from lalia.functions import FunctionCallResult, Result
+from lalia.functions import FunctionCallResult, Result, get_schema
+from lalia.functions.types import FunctionSchema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
@@ -42,13 +51,24 @@ def get_tokens(
 
 
 def estimate_tokens_in_messages(
-    messages: MessageBuffer | Sequence[Message],
+    messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
     message_tokens = []
 
     for message in messages:
-        base_message = message.to_base_message()
+        match message:
+            case (
+                SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
+            ):
+                base_message = message.to_base_message()
+            case dict():
+                base_message = BaseMessage(**message)
+            case _:
+                raise ValueError(
+                    "Input must be either a MessageBuffer or a a sequence of Messages"
+                    "or raw dictionaries"
+                )
 
         # role tokens
         message_tokens.append(Overhead.ROLE)
@@ -100,14 +120,24 @@ def estimate_tokens_in_messages(
 
 
 def estimate_tokens_in_functions(
-    functions: Sequence[Callable[..., Result | FunctionCallResult | str]],
+    functions: Sequence[
+        Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
+    ],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
     include_function_return_types: bool = False,
 ) -> int:
     function_tokens = []
     for function in functions:
+        match function:
+            case Callable():
+                function_schema = get_schema(function)
+            case dict():
+                function_schema = FunctionSchema(**function)
+            case _:
+                raise ValueError("Input must be either a Callable or a dictionary")
+
         typescript_defintion = format_function_as_typescript(
-            function, include_function_return_types
+            function_schema, include_function_return_types
         )
         function_tokens.append(get_tokens(typescript_defintion, model_name=model_name))
     function_tokens.append(Overhead.FUNCTION_DEFINITION)
@@ -115,8 +145,10 @@ def estimate_tokens_in_functions(
 
 
 def estimate_token_count(
-    messages: MessageBuffer | Sequence[Message],
-    functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
+    messages: MessageBuffer | Sequence[Message | dict[str, Any]],
+    functions: Sequence[
+        Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
+    ] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
     include_function_return_types: bool = False,
@@ -133,10 +165,26 @@ def estimate_token_count(
         )
 
     # if there's a system message _and_ functions are present, subtract four tokens
-    if functions and any(
-        message.to_base_message().role.name == "system" for message in messages
-    ):
-        tokens.append(Overhead.SYSTEM_ROLE)
+    if functions:
+        for message in messages:
+            match message:
+                case (
+                    SystemMessage()
+                    | UserMessage()
+                    | AssistantMessage()
+                    | FunctionMessage()
+                ):
+                    base_message = message.to_base_message()
+                case dict():
+                    base_message = BaseMessage(**message)
+                case _:
+                    raise ValueError(
+                        "Input must be either a MessageBuffer or a a sequence of "
+                        "Messages or raw dictionaries"
+                    )
+            if base_message.role.name == "system":
+                tokens.append(Overhead.SYSTEM_ROLE)
+                break
 
     # only add specific function call tokens, if its 'auto' add nothing
     if function_call != FunctionCallDirective.AUTO:
@@ -149,12 +197,32 @@ def estimate_token_count(
     return sum(tokens)
 
 
-def budget_and_truncate_message_buffer(
+@overload
+def truncate_messages(
+    messages: Sequence[dict[str, Any]],
+    token_threshold: int,
+    completion_buffer: int,
+    functions: Sequence[dict[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    ...
+
+
+@overload
+def truncate_messages(
     messages: MessageBuffer | Sequence[Message],
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
-) -> deque[Message]:
+) -> list[Message]:
+    ...
+
+
+def truncate_messages(
+    messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
+    token_threshold: int,
+    completion_buffer: int,
+    functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
+) -> list[Message] | list[dict[str, Any]]:
     max_tokens_usable = token_threshold - completion_buffer
     current_tokens = estimate_token_count(messages, functions)
 
@@ -162,9 +230,9 @@ def budget_and_truncate_message_buffer(
     while current_tokens > max_tokens_usable:
         if not truncated_messages:
             raise ValueError(
-                "All messages folded. Remove functions or increase token threshold."
+                "All messages truncated. Remove functions or increase token threshold."
             )
         truncated_messages.popleft()
         current_tokens = estimate_token_count(truncated_messages, functions)
 
-    return truncated_messages
+    return list(truncated_messages)  # type: ignore

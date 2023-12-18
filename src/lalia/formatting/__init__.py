@@ -137,10 +137,8 @@ def format_function_model(
 
 
 def format_function_as_typescript(
-    function_to_convert: Callable, include_return_type: bool = False
+    function_to_convert: FunctionSchema, include_return_type: bool = False
 ):
-    """Converts a Python function callable into its TypeScript type signature
+    """Converts a FunctionSchema into its TypeScript type signature
     representation."""
-    function_info = get_schema(function_to_convert)
-
-    return format_function_model(function_info, include_return_type)
+    return format_function_model(function_to_convert, include_return_type)

@@ -13,7 +13,7 @@ from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_mess
 from lalia.functions import get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
-from lalia.llm.budgeting.token_counter import budget_and_truncate_message_buffer
+from lalia.llm.budgeting.token_counter import truncate_messages
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
@@ -143,7 +143,7 @@ class OpenAIChat:
         )
 
         # TODO: make completion_buffer dynamic
-        messages = budget_and_truncate_message_buffer(
+        messages = truncate_messages(
             messages, token_threshold=model.token_limit, completion_buffer=100
         )
 
