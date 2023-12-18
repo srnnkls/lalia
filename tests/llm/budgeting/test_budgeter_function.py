@@ -1,22 +1,8 @@
 import pytest
 
 from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages.messages import (
-    AssistantMessage,
-    FunctionCall,
-    SystemMessage,
-    UserMessage,
-)
-from lalia.chat.session import Session
-from lalia.llm.budgeting.token_counter import (
-    budget_and_truncate_message_buffer,
-    count_tokens_in_string,
-    estimate_token_count,
-    estimate_tokens_in_functions,
-    estimate_tokens_in_messages,
-    get_tokens,
-)
-from lalia.llm.openai import ChatModel, OpenAIChat
+from lalia.chat.messages.messages import AssistantMessage, SystemMessage, UserMessage
+from lalia.llm.budgeting.token_counter import estimate_token_count, truncate_messages
 
 
 @pytest.fixture()
@@ -34,7 +20,7 @@ def message_buffer():
 
 class TestBudgeterFunction:
     def test_budgeter_function(self, message_buffer):
-        truncated_message_buffer = budget_and_truncate_message_buffer(
+        truncated_message_buffer = truncate_messages(
             messages=message_buffer,
             token_threshold=30,
             completion_buffer=5,
@@ -48,9 +34,9 @@ class TestBudgeterFunction:
     def test_truncation_tokens_exceeded(self, message_buffer, foo_function):
         with pytest.raises(
             ValueError,
-            match=r"All messages folded. Remove functions or increase token threshold.",
+            match=r"All messages truncated. Remove functions or increase token threshold.",
         ) as _:
-            _ = budget_and_truncate_message_buffer(
+            _ = truncate_messages(
                 messages=message_buffer,
                 token_threshold=30,
                 completion_buffer=5,
@@ -58,9 +44,9 @@ class TestBudgeterFunction:
             )
         with pytest.raises(
             ValueError,
-            match=r"All messages folded. Remove functions or increase token threshold.",
+            match=r"All messages truncated. Remove functions or increase token threshold.",
         ) as _:
-            _ = budget_and_truncate_message_buffer(
+            _ = truncate_messages(
                 messages=message_buffer,
                 token_threshold=0,
                 completion_buffer=5,
