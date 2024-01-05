@@ -41,7 +41,7 @@ def derive_tag_predicate(
         case Tag() | TagPattern():
             return PredicateRegistry.derive_predicate(tags)
         case set() as tag_likes:
-            return lambda message_tags: all(
+            return lambda message_tags: any(
                 PredicateRegistry.derive_predicate(tag)(message_tags)
                 for tag in tag_likes
             )

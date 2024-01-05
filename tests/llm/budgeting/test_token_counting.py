@@ -45,12 +45,14 @@ def message_buffer():
 
 
 @pytest.fixture()
-def message_buffer_with_function_call():
+def message_buffer_with_function_call(bar_function):
     return [
         SystemMessage(content="You are a vet."),
         UserMessage(content="Is it wise to stroke a boar?"),
         AssistantMessage(
-            function_call=FunctionCall(name="bar", arguments={"a": 5, "b": "ding"})
+            function_call=FunctionCall(
+                name="bar", arguments={"a": 5, "b": "ding"}, function=bar_function
+            )
         ),
     ]
 

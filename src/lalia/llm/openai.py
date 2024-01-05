@@ -10,15 +10,65 @@ from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
+from lalia.chat.messages.tags import TagPattern
 from lalia.functions import get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
-from lalia.llm.budgeting.token_counter import truncate_messages
+from lalia.llm.budgeting.token_counter import (
+    estimate_token_count,
+    truncate_messages,
+)
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
+COMPLETION_BUFFER = 200
+
 logger = get_logger(__name__)
+
+
+def _truncate_messages(
+    messages: Sequence[Message],
+    model: ChatModel,
+    functions: Sequence[Callable[..., Any]],
+    completion_buffer: int,
+    exlude_roles: frozenset[str] = frozenset({"system"}),
+) -> list[Message]:
+    excluded_messages = [
+        message
+        for message in messages
+        if message.to_base_message().role in exlude_roles
+    ]
+
+    excluded_messages_tokens = estimate_token_count(
+        messages=excluded_messages,
+        model=model,
+    )
+
+    to_truncate = [
+        message
+        for message in messages
+        if message.to_base_message().role not in exlude_roles
+    ]
+
+    messages_truncated = [
+        *excluded_messages,
+        *truncate_messages(
+            messages=to_truncate,
+            token_threshold=model.token_limit - excluded_messages_tokens,
+            completion_buffer=completion_buffer,
+            functions=functions,
+        ),
+    ]
+
+    logger.info(
+        f"Truncated {len(list(messages))} messages with "
+        f"{estimate_token_count(messages, functions, model=model)} tokens to "
+        f"{len(messages_truncated)} messages with "
+        f"{estimate_token_count(messages_truncated, functions, model=model)} tokens."
+    )
+
+    return messages_truncated
 
 
 @dataclass
@@ -53,12 +103,12 @@ class OpenAIChat:
     temperature: float = 1.0
     max_retries: int = 5
     parser: InitVar[Parser | None] = None
-
     failure_messages: list[Message] = field(
         default_factory=lambda: [
             UserMessage(FAILURE_QUERY),
         ]
     )
+    completion_buffer: int = COMPLETION_BUFFER
 
     def __post_init__(self, api_key: str, parser: Parser | None):
         self._api_key = api_key
@@ -96,7 +146,11 @@ class OpenAIChat:
         response: dict[str, Any],
         functions: Sequence[Callable[..., Any]],
         messages: Sequence[Message] = (),
+        context: set[TagPattern] | None = None,
     ) -> dict[str, Any]:
+        if context is None:
+            context = set()
+
         if (
             function_call := response["choices"][0]["message"].get("function_call")
         ) is not None:
@@ -108,7 +162,9 @@ class OpenAIChat:
                 function=func,
                 messages=messages,
             )
+            function_call["function"] = func
             function_call["arguments"] = args
+            function_call["context"] = context
             function_call["parsing_error_messages"] = parsing_error_messages
             return response
         else:
@@ -117,8 +173,9 @@ class OpenAIChat:
     def complete(
         self,
         messages: Sequence[Message],
-        model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
-        functions: Sequence[Callable[..., Any]] | None = None,
+        context: set[TagPattern] | None = None,
+        model: ChatModel | None = None,
+        functions: Sequence[Callable[..., Any]] = (),
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
@@ -136,19 +193,27 @@ class OpenAIChat:
         user: str | None = None,
         timeout: int | None = None,
     ) -> ChatCompletionResponse:
+        if context is None:
+            context = set()
+        if model is None:
+            model = self.model
+
         func_schemas = (
             [get_schema(func).to_json_schema() for func in functions]
             if functions
             else []
         )
 
-        # TODO: make completion_buffer dynamic
-        messages = truncate_messages(
-            messages, token_threshold=model.token_limit, completion_buffer=100
+        # TODO: Pass context tags
+        messages_truncated = _truncate_messages(
+            messages=messages,
+            model=model,
+            functions=functions,
+            completion_buffer=self.completion_buffer,
         )
 
         raw_response = self.complete_raw(
-            messages=to_raw_messages(messages),
+            messages=to_raw_messages(messages_truncated),
             model=model,
             functions=func_schemas,
             function_call=function_call,
@@ -163,9 +228,10 @@ class OpenAIChat:
             user=user,
             timeout=timeout,
         )
+
         if functions:
             raw_response = self._parse_function_call_args(
-                raw_response, functions, messages
+                raw_response, functions, messages, context
             )
 
         response = ChatCompletionResponse(**raw_response)
@@ -176,7 +242,7 @@ class OpenAIChat:
         self,
         messages: Sequence[dict[str, Any]],
         model: ChatModel | None = None,
-        functions: Sequence[dict[str, Any]] | None = None,
+        functions: Sequence[dict[str, Any]] = (),
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,

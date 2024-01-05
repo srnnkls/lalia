@@ -2,6 +2,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 
 from lalia.chat.messages import Message
+from lalia.chat.messages.tags import TagPattern
 from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDirective
 
 
@@ -12,8 +13,9 @@ class LLM(Protocol):
     def complete(
         self,
         messages: Sequence[Message],
-        model: ChatModel,
-        functions: Sequence[Callable[..., Any]] | None = None,
+        context: set[TagPattern] | None = None,
+        model: ChatModel | None = None,
+        functions: Sequence[Callable[..., Any]] = (),
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
@@ -36,8 +38,8 @@ class LLM(Protocol):
     def complete_raw(
         self,
         messages: Sequence[dict[str, Any]],
-        model: ChatModel,
-        functions: Sequence[dict[str, Any]] | None = None,
+        model: ChatModel | None = None,
+        functions: Sequence[dict[str, Any]] = (),
         function_call: FunctionCallDirective
         | dict[str, str] = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,

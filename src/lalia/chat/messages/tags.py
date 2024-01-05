@@ -123,6 +123,9 @@ class PredicateRegistry:
 
                 return cls._predicates[tag_pattern]
 
+            case Callable() as predicate:
+                return predicate
+
         raise TypeError(f"No predicate defined for: '{type(operand)}'")
 
 
@@ -133,15 +136,18 @@ class _PredicateOperator(ABC):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, _PredicateOperator):
             return NotImplemented
-        return set(self.predicates) == set(other.predicates)
+        return {id(p) for p in self.predicates} == {id(p) for p in other.predicates}
+
+    def __hash__(self) -> int:
+        return hash(tuple(id(p) for p in self.predicates))
 
     @abstractmethod
     def __call__(self, tags: set[Tag]) -> bool:
         ...
 
-    def __and__(self, other: _PredicateOperator | Tag) -> _And:
+    def __and__(self, other: _PredicateOperator | Tag | TagPattern) -> _And:
         match other:
-            case Tag():
+            case Tag() | TagPattern():
                 return _And(self, PredicateRegistry.derive_predicate(other))
             case _PredicateOperator():
                 return _And(self, other)
@@ -149,9 +155,12 @@ class _PredicateOperator(ABC):
             f"Unsupported operand type(s) for &: '{type(self)}' and '{type(other)}'"
         )
 
-    def __or__(self, other: _PredicateOperator | Tag) -> _Or:
+    def __invert__(self) -> _Not:
+        return _Not(self)
+
+    def __or__(self, other: _PredicateOperator | Tag | TagPattern) -> _Or:
         match other:
-            case Tag():
+            case Tag() | TagPattern():
                 return _Or(self, PredicateRegistry.derive_predicate(other))
             case _PredicateOperator():
                 return _Or(self, other)
@@ -168,6 +177,11 @@ class _And(_PredicateOperator):
 class _Or(_PredicateOperator):
     def __call__(self, tags: set[Tag]) -> bool:
         return any(predicate(tags) for predicate in self.predicates)
+
+
+class _Not(_PredicateOperator):
+    def __call__(self, tags: set[Tag]) -> bool:
+        return not any(predicate(tags) for predicate in self.predicates)
 
 
 @dataclass(frozen=True)
@@ -297,6 +311,9 @@ class TagPattern:
             f"Unsupported operand type(s) for &: '{type(self).__name__}' "
             f"and '{type(other).__name__}'"
         )
+
+    def __invert__(self) -> _Not:
+        return _Not(PredicateRegistry.derive_predicate(self))
 
     def __or__(self, other: Tag | TagPattern | _PredicateOperator) -> _Or:
         match other:

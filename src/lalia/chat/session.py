@@ -157,21 +157,6 @@ class Session:
             self._handle_exception(e)
             raise AssertionError("Unreachable") from e
 
-    def _complete_failure(self, message: Message | None = None) -> Completion:
-        # TODO: Accept `Error` isstead of `Message`?
-        self.messages.add(message)
-        self.messages.add_messages(self.failure_messages)
-
-        with self.messages.expand({TagPattern("error", ".*")}) as messages:
-            choice, *_ = self.llm.complete(messages).choices
-
-        assistant_message, finish_reson = self._handle_choice(choice)
-
-        if self.autocommit:
-            self.messages.commit()
-
-        return Completion(assistant_message, finish_reson)
-
     def _complete_choices(
         self, message: Message | None = None, n_choices=1
     ) -> list[Completion]:
@@ -185,10 +170,13 @@ class Session:
             dispatcher_finish_reason,
         ) = self.dispatcher.dispatch(self)
 
+        if "functions" not in params:
+            params["functions"] = self.functions
+
         with messages.expand(context) as messages:
             response = llm_complete(
                 messages=messages,
-                functions=self.functions,
+                context=context,
                 n_choices=n_choices,
                 **params,
             )
@@ -212,9 +200,26 @@ class Session:
 
         return completions
 
+    def _complete_failure(self, message: Message | None = None) -> Completion:
+        # TODO: Accept `Error` isstead of `Message`?
+        self.messages.add(message)
+        self.messages.add_messages(self.failure_messages)
+
+        with self.messages.expand({TagPattern("error", ".*")}) as messages:
+            choice, *_ = self.llm.complete(messages).choices
+
+        assistant_message, finish_reson = self._handle_choice(choice)
+
+        if self.autocommit:
+            self.messages.commit()
+
+        return Completion(assistant_message, finish_reson)
+
     def _complete_function_call_error(
         self,
         error_message: FunctionMessage,
+        context: set[TagPattern],
+        function: Callable[..., Any],
     ) -> AssistantMessage:
         """
         Completes an erroneous function call and adds a tagged error message to the
@@ -223,12 +228,14 @@ class Session:
 
         self.messages.add(error_message)
 
-        with self.messages.expand(error_message.tags) as messages:
+        error_context = {TagPattern.from_tag_like(tag) for tag in error_message.tags}
+        with self.messages.expand(context | error_context) as messages:
             logger.debug(list(messages))
             response = self.llm.complete(
                 messages=messages,
-                functions=self.functions,
-                function_call={"name": error_message.name},
+                context=context,
+                functions=[function],
+                function_call={"name": get_name(function)},
                 n_choices=1,
             )
 
@@ -244,6 +251,7 @@ class Session:
             match function_call_message.function_call:
                 case FunctionCall(
                     name=name,
+                    function=function,
                     arguments=arguments,
                     parsing_error_messages=parsing_error_messages,
                 ):
@@ -267,13 +275,15 @@ class Session:
                         )
 
                     function_message, finish_reason = self._handle_function_call(
-                        name, arguments
+                        name, function, arguments
                     )
 
                     if finish_reason is FinishReason.ERROR:
                         function_call_message.tags.add(Tag("error", "function_call"))
                         function_call_message = self._complete_function_call_error(
-                            function_message
+                            error_message=function_message,
+                            context=function_call_message.function_call.context,
+                            function=function,
                         )
                         continue
 
@@ -331,21 +341,15 @@ class Session:
             raise exception
 
     def _handle_function_call(
-        self, name: str, arguments: dict[str, Any]
+        self, name: str, function: Callable[..., Any], arguments: dict[str, Any]
     ) -> tuple[FunctionMessage, FinishReason]:
         """
         Executes a function call and returns the result as a FunctionMessage.
 
         Executions run in a retry loop to handle errors.
         """
-        function_names = [get_name(func) for func in self.functions]
 
-        if name in function_names:
-            func = next(func for func in self.functions if get_name(func) == name)
-        else:
-            raise ValueError(f"Function `{name}` not found.")
-
-        result = execute_function_call(func, arguments)
+        result = execute_function_call(function, arguments)
         logger.debug(result)
 
         match result:

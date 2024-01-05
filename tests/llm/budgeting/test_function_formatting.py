@@ -279,7 +279,7 @@ class TestParameterFormatting:
 
 class TestFunctionFormatting:
     def test_function_formatting(self, foo_function, foo_expected):
-        foo_formatted = format_function_as_typescript(foo_function)
+        foo_formatted = format_function_as_typescript(get_schema(foo_function))
         assert foo_formatted == foo_expected
 
 
