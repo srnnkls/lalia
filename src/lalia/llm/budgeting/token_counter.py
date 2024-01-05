@@ -212,7 +212,7 @@ def truncate_messages(
     messages: MessageBuffer | Sequence[Message],
     token_threshold: int,
     completion_buffer: int,
-    functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
+    functions: Sequence[Callable[..., Any]] = (),
 ) -> list[Message]:
     ...
 
@@ -221,8 +221,7 @@ def truncate_messages(
     messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
     token_threshold: int,
     completion_buffer: int,
-    functions: Sequence[Callable[..., Result | FunctionCallResult | str]]
-    | Sequence[dict[str, Any]] = (),
+    functions: Sequence[Callable[..., Any]] | Sequence[dict[str, Any]] = (),
 ) -> list[Message] | list[dict[str, Any]]:
     return truncate_messages_or_buffer(
         messages=messages,
@@ -236,9 +235,7 @@ def truncate_messages_or_buffer(
     messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
     token_threshold: int,
     completion_buffer: int,
-    functions: Sequence[
-        Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
-    ] = (),
+    functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
 ) -> list[Message] | list[dict[str, Any]]:
     max_tokens_usable = token_threshold - completion_buffer
     current_tokens = estimate_token_count(messages, functions)

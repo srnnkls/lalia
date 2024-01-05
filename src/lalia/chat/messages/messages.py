@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, field
 from datetime import UTC, datetime
 from typing import Any
 
+from openai.types.chat.chat_completion_message import FunctionCall as OpenAIFunctionCall
 from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 from pydantic.functional_serializers import model_serializer
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from lalia.chat.messages.tags import Tag
+from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.chat.roles import Role
 from lalia.functions import FunctionCallResult
 from lalia.io.models.openai import ChatCompletionRequestMessage
@@ -164,7 +165,9 @@ class UserMessage:
 @dataclass
 class FunctionCall:
     name: str
+    function: Callable[..., Any]
     arguments: dict[str, Any] | None
+    context: set[TagPattern] = field(default_factory=set)
     parsing_error_messages: list[SystemMessage] = field(default_factory=list)
 
     @field_validator("arguments", mode="before")
@@ -220,7 +223,7 @@ class AssistantMessage:
         f_call = {
             field: value
             for field, value in asdict(self.function_call).items()
-            if field != "parsing_error_messages"
+            if field in OpenAIFunctionCall.model_fields
         }
         f_call["arguments"] = json.dumps(f_call["arguments"])
 

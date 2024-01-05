@@ -181,6 +181,7 @@ class FakeLLM:
             function_call_response = {
                 "name": func.__name__,
                 "arguments": args,
+                "function": func,
             }
             content_response = None
             finish_reason = FinishReason.FUNCTION_CALL

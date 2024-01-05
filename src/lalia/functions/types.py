@@ -246,7 +246,7 @@ class Result:
 
     value: Any | None = None
     error: Error | None = None
-    finish_reason: FinishReason = FinishReason.DELEGATE
+    finish_reason: FinishReason = FinishReason.FUNCTION_CALL
 
 
 @dataclass
@@ -259,7 +259,7 @@ class FunctionCallResult(Generic[A, T]):
     arguments: dict[str, A]
     value: T | None = None
     error: Error | None = None
-    finish_reason: FinishReason = FinishReason.DELEGATE
+    finish_reason: FinishReason = FinishReason.FUNCTION_CALL
 
     def to_string(self) -> str:
         match self.error, self.value:

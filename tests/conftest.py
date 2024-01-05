@@ -94,5 +94,18 @@ def foo_function():
 
 
 @pytest.fixture(scope="session")
+def bar_function():
+    def bar(
+        a: Annotated[int, "This is a integer number."],
+        b: Annotated[str | int, "This will be appended."] = "test",
+    ) -> str:
+        """This is a test function.
+        It combines number a, appends string b."""
+        return f"{a}_{b}"
+
+    return bar
+
+
+@pytest.fixture(scope="session")
 def max_token_deviation():
     return MAX_TOKEN_DEVIATION
