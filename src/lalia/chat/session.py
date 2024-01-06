@@ -263,7 +263,7 @@ class Session:
 
                     self.messages.add(function_call_message)
 
-                    if arguments is None:
+                    if arguments is None or function is None:
                         function_call_message.tags.add(Tag("error", "function_call"))
                         return self._handle_function_call_failure(
                             failure_content=(
@@ -412,7 +412,6 @@ class Session:
     ) -> list[Completion]:
         try:
             return self._complete_choices(message, n_choices)
-
         except Exception as e:
             self._handle_exception(e)
             raise AssertionError("Unreachable") from e

@@ -165,8 +165,8 @@ class UserMessage:
 @dataclass
 class FunctionCall:
     name: str
-    function: Callable[..., Any]
     arguments: dict[str, Any] | None
+    function: Callable[..., Any] | None = None
     context: set[TagPattern] = field(default_factory=set)
     parsing_error_messages: list[SystemMessage] = field(default_factory=list)
 
