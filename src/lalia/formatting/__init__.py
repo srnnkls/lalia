@@ -1,28 +1,11 @@
 import re
-from collections.abc import Callable
 from textwrap import indent as tw_indent
-from types import UnionType
-from typing import Any, get_origin
+from typing import Any
 
 from lalia.formatting.templates import (
     DESCRIPTION_TEMPLATE,
     FUNCTION_TEMPLATE,
     PARAMETER_TEMPLATE,
-)
-from lalia.functions import get_schema
-from lalia.functions.types import (
-    ArrayProp,
-    BaseProp,
-    BoolProp,
-    FunctionSchema,
-    NullProp,
-    NumberProp,
-    ObjectProp,
-    PropItem,
-    ReturnType,
-    StringProp,
-    TypeScriptTypes,
-    VariantProp,
 )
 
 
@@ -40,66 +23,33 @@ def format_description(description: str | None) -> str:
     return ""
 
 
-def format_parameter_type(param: PropItem | None) -> str:
+def format_parameter_type(param: dict[str, Any]) -> str:
     """
     Determines the TypeScript type representation of a given parameter.
     """
-    match param:
-        case StringProp() as string_prop:
-            if string_prop.enum:
-                return " | ".join(f'"{v}"' for v in string_prop.enum)
-            return "string"
-        case NumberProp() as number_prop:
-            if number_prop.enum:
-                return " | ".join(f"{v}" for v in number_prop.enum)
-            return "number"
-        case BoolProp():
-            return "boolean"
-        case NullProp():
-            return "null"
-        case ArrayProp(items=BaseProp() as items):
-            return f"{format_parameter_type(items)}[]"
-        case ObjectProp(properties=dict() as properties):  # noqa: F841
+    match param["type"]:
+        case "string" | "string" | "boolean" | "null" as type_:
+            if param.get("enum"):
+                return " | ".join(f'"{v}"' for v in param["enum"])
+            return type_
+        case "array":
+            return f"{format_parameter_type(param['items'])}[]"
+        case "object":
             return "object"
         case _:
             return "any"
 
 
-def format_return_type(return_type: ReturnType | Any) -> str:
-    """
-    Maps a Python return type to its TypeScript equivalent.
-    """
-    match return_type:
-        case ReturnType(type=type):
-            if get_origin(type) is UnionType:
-                union_types = return_type.type.__args__
-                ts_types = [TypeScriptTypes.from_python_type(t) for t in union_types]
-                return " | ".join(ts_types)
-            else:
-                return TypeScriptTypes.from_python_type(return_type.type)
-        case _:
-            return "any"
-
-
-def format_parameter(name: str, param: PropItem, indent="") -> str:
+def format_parameter(name: str, param: dict[str, Any], indent: str) -> str:
     """
     Formats a function parameter, including its type and default value
     as its TypeScript representation.
     """
-    description = format_description(param.description)
-    default = f" = {param.default!r}" if param.default is not None else ""
+    description = format_description(param.get("description"))
+    default = f" = {param.get('default', '')!r}"
     optional = "?" if default else ""
 
-    match param:
-        case ObjectProp() as prop:
-            properties = [
-                f"{k}: {format_parameter_type(v)}" for k, v in prop.properties.items()
-            ]
-            type_str = "{ " + ", ".join(properties) + " }"
-        case VariantProp() as prop:
-            type_str = prop.type
-        case _:
-            type_str = format_parameter_type(param)
+    type_str = format_parameter_type(param)
 
     return tw_indent(
         PARAMETER_TEMPLATE.format(
@@ -113,32 +63,25 @@ def format_parameter(name: str, param: PropItem, indent="") -> str:
     )
 
 
-def format_function_model(
-    function_model: FunctionSchema, include_return_type: bool = False
-) -> str:
+def format_function_model(function_model: dict[str, Any]) -> str:
     """
     Generates the TypeScript representation of a function model.
     """
-    description = format_description(function_model.description)
+    description = format_description(function_model["description"])
     parameters = [
         format_parameter(k, v, indent="")
-        for k, v in function_model.parameters.properties.items()
+        for k, v in function_model["parameters"]["properties"].items()
     ]
     parameters_str = tw_indent("\n".join(parameters), "    ")
-    return_type_str = (
-        format_return_type(function_model.return_type) if include_return_type else "any"
-    )
     return FUNCTION_TEMPLATE.format(
         description=description,
-        name=function_model.name,
+        name=function_model["name"],
         parameters=parameters_str,
-        return_type=return_type_str,
+        return_type="any",
     )
 
 
-def format_function_as_typescript(
-    function_to_convert: FunctionSchema, include_return_type: bool = False
-):
+def format_function_as_typescript(function_to_convert: dict[str, Any]) -> str:
     """Converts a FunctionSchema into its TypeScript type signature
     representation."""
-    return format_function_model(function_to_convert, include_return_type)
+    return format_function_model(function_to_convert)

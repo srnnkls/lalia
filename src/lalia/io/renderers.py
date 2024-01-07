@@ -83,9 +83,8 @@ class ConversationRenderer(JupyterMixin):
                 JSON(
                     json.dumps(
                         {
-                            k: v
-                            for k, v in asdict(message.function_call).items()
-                            if k in ("name", "arguments")
+                            "name": message.function_call.name,
+                            "arguments": message.function_call.arguments,
                         }
                     )
                 )

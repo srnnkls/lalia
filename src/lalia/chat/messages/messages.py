@@ -221,10 +221,10 @@ class AssistantMessage:
             )
 
         f_call = {
-            field: value
-            for field, value in asdict(self.function_call).items()
-            if field in OpenAIFunctionCall.model_fields
+            "name": self.function_call.name,
+            "arguments": self.function_call.arguments or {},
         }
+
         f_call["arguments"] = json.dumps(f_call["arguments"])
 
         return BaseMessage(

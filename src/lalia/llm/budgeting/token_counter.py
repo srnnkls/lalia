@@ -17,7 +17,6 @@ from lalia.chat.messages.messages import (
 )
 from lalia.formatting import format_function_as_typescript
 from lalia.functions import FunctionCallResult, Result, get_schema
-from lalia.functions.types import FunctionSchema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
@@ -124,21 +123,18 @@ def estimate_tokens_in_functions(
         Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
     ],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
-    include_function_return_types: bool = False,
 ) -> int:
     function_tokens = []
     for function in functions:
         match function:
             case Callable():
-                function_schema = get_schema(function)
+                function_schema = get_schema(function).to_json_schema()
             case dict():
-                function_schema = FunctionSchema(**function)
+                function_schema = function
             case _:
                 raise ValueError("Input must be either a Callable or a dictionary")
 
-        typescript_defintion = format_function_as_typescript(
-            function_schema, include_function_return_types
-        )
+        typescript_defintion = format_function_as_typescript(function_schema)
         function_tokens.append(get_tokens(typescript_defintion, model_name=model_name))
     function_tokens.append(Overhead.FUNCTION_DEFINITION)
     return sum(function_tokens)
@@ -151,18 +147,13 @@ def estimate_token_count(
     ] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
-    include_function_return_types: bool = False,
 ) -> int:
     tokens = []
 
     tokens.append(estimate_tokens_in_messages(messages, model))
 
     if functions:
-        tokens.append(
-            estimate_tokens_in_functions(
-                functions, model, include_function_return_types
-            )
-        )
+        tokens.append(estimate_tokens_in_functions(functions, model))
 
     # if there's a system message _and_ functions are present, subtract four tokens
     if functions:

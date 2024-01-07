@@ -27,17 +27,15 @@ COMPLETION_BUFFER = 200
 logger = get_logger(__name__)
 
 
-def _truncate_messages(
-    messages: Sequence[Message],
+def _truncate_raw_messages(
+    messages: Sequence[dict[str, Any]],
     model: ChatModel,
-    functions: Sequence[Callable[..., Any]],
+    functions: Sequence[dict[str, Any]],
     completion_buffer: int,
     exlude_roles: frozenset[str] = frozenset({"system"}),
-) -> list[Message]:
+) -> list[dict[str, Any]]:
     excluded_messages = [
-        message
-        for message in messages
-        if message.to_base_message().role in exlude_roles
+        message for message in messages if message["role"] in exlude_roles
     ]
 
     excluded_messages_tokens = estimate_token_count(
@@ -46,9 +44,7 @@ def _truncate_messages(
     )
 
     to_truncate = [
-        message
-        for message in messages
-        if message.to_base_message().role not in exlude_roles
+        message for message in messages if message["role"] not in exlude_roles
     ]
 
     messages_truncated = [
@@ -204,16 +200,8 @@ class OpenAIChat:
             else []
         )
 
-        # TODO: Pass context tags
-        messages_truncated = _truncate_messages(
-            messages=messages,
-            model=model,
-            functions=functions,
-            completion_buffer=self.completion_buffer,
-        )
-
         raw_response = self.complete_raw(
-            messages=to_raw_messages(messages_truncated),
+            messages=to_raw_messages(messages),
             model=model,
             functions=func_schemas,
             function_call=function_call,
@@ -265,8 +253,16 @@ class OpenAIChat:
         if model is None:
             model = self.model
 
+        # TODO: Pass context tags
+        messages_truncated = _truncate_raw_messages(
+            messages=messages,
+            model=model,
+            functions=functions,
+            completion_buffer=self.completion_buffer,
+        )
+
         params = {
-            "messages": messages,
+            "messages": messages_truncated,
             "model": model,
             "max_tokens": max_tokens,
             "n": n_choices,
