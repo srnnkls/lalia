@@ -9,7 +9,7 @@ from pydantic import TypeAdapter, ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
-from lalia.chat.messages import Message, SystemMessage
+from lalia.chat.messages import FunctionMessage, Message
 from lalia.chat.messages.tags import Tag
 from lalia.chat.roles import Role
 from lalia.functions import dereference_schema, get_callable, get_schema
@@ -69,7 +69,7 @@ class Parser(Protocol):
         payload: str,
         adapter: TypeAdapter,
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
         ...
 
     def parse_function_call_args(
@@ -77,7 +77,7 @@ class Parser(Protocol):
         payload: str,
         function: Callable[..., Any],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
         ...
 
 
@@ -99,7 +99,7 @@ class LLMParser:
         messages: Sequence[dict[str, Any]],
         llm: LLM,
         exception: Exception,
-    ) -> tuple[str, SystemMessage]:
+    ) -> tuple[str, FunctionMessage]:
         common_tags = {
             Tag("error", "function_call"),
             Tag("function", function_call_schema["name"]),
@@ -107,20 +107,24 @@ class LLMParser:
 
         match exception:
             case ValidationError():
-                error_message = SystemMessage(
+                error_message = FunctionMessage(
                     content=VALIDATION_ERROR_DIRECTIVE.format(
                         error=exception, payload=payload
                     ),
+                    name=function_call_schema["name"],
+                    result=None,
                     tags={
                         Tag("error", "validation"),
                         *common_tags,
                     },
                 )
             case json.JSONDecodeError() | YAMLError():
-                error_message = SystemMessage(
+                error_message = FunctionMessage(
                     content=DESERIALIZATION_ERROR_DIRECTIVE.format(
                         error=exception, payload=payload
                     ),
+                    name=function_call_schema["name"],
+                    result=None,
                     tags={
                         Tag("error", "deserialization"),
                         *common_tags,
@@ -171,9 +175,9 @@ class LLMParser:
         adapter: TypeAdapter,
         function_call_schema: dict[str, Any],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
         raw_messages = to_raw_messages(messages)
-        error_messages: list[SystemMessage] = []
+        error_messages: list[FunctionMessage] = []
         for llm in self.llms:
             for _ in range(self.max_retries):
                 try:
@@ -210,7 +214,7 @@ class LLMParser:
         payload: str,
         adapter: TypeAdapter,
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
         function_call_schema = _get_func_call_schema(adapter)
         return self._parse(payload, adapter, function_call_schema, messages)
 
@@ -219,7 +223,7 @@ class LLMParser:
         payload: str,
         function: Callable[..., Any],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[SystemMessage]]:
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
         adapter = TypeAdapter(get_callable(function))
         function_call_schema = get_schema(function).to_json_schema()
         return self._parse(payload, adapter, function_call_schema, messages)

@@ -163,12 +163,44 @@ class UserMessage:
 
 
 @dataclass
+class FunctionMessage:
+    content: str
+    name: str
+    result: FunctionCallResult | None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    tags: set[Tag] = field(default_factory=set)
+
+    @model_serializer
+    def serialize_message(self) -> dict[str, Any]:
+        return self.to_base_message().to_raw_message()
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _parse_tags(cls, tags: list[dict[str, str]] | set[Tag]) -> set[Tag]:
+        return _parse_tags(tags)
+
+    def _repr_mimebundle_(
+        self, include: Sequence[str], exclude: Sequence[str], **kwargs
+    ) -> dict[str, str]:
+        return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
+
+    def to_base_message(self) -> BaseMessage:
+        return BaseMessage(
+            role=Role.FUNCTION,
+            name=self.name,
+            content=self.content,
+            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
+            timestamp=self.timestamp,
+        )
+
+
+@dataclass
 class FunctionCall:
     name: str
     arguments: dict[str, Any] | None
     function: Callable[..., Any] | None = None
     context: set[TagPattern] = field(default_factory=set)
-    parsing_error_messages: list[SystemMessage] = field(default_factory=list)
+    parsing_error_messages: list[FunctionMessage] = field(default_factory=list)
 
     @field_validator("arguments", mode="before")
     @classmethod
@@ -231,38 +263,6 @@ class AssistantMessage:
             role=Role.ASSISTANT,
             content=self.content,
             function_call=f_call,
-            tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
-            timestamp=self.timestamp,
-        )
-
-
-@dataclass
-class FunctionMessage:
-    content: str
-    name: str
-    result: FunctionCallResult | None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
-    tags: set[Tag] = field(default_factory=set)
-
-    @model_serializer
-    def serialize_message(self) -> dict[str, Any]:
-        return self.to_base_message().to_raw_message()
-
-    @field_validator("tags", mode="before")
-    @classmethod
-    def _parse_tags(cls, tags: list[dict[str, str]] | set[Tag]) -> set[Tag]:
-        return _parse_tags(tags)
-
-    def _repr_mimebundle_(
-        self, include: Sequence[str], exclude: Sequence[str], **kwargs
-    ) -> dict[str, str]:
-        return MessageRenderer(self)._repr_mimebundle_(include, exclude, **kwargs)
-
-    def to_base_message(self) -> BaseMessage:
-        return BaseMessage(
-            role=Role.FUNCTION,
-            name=self.name,
-            content=self.content,
             tags=[{"key": tag.key, "value": tag.value} for tag in self.tags],
             timestamp=self.timestamp,
         )

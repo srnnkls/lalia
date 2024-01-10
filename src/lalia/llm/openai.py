@@ -22,7 +22,7 @@ from lalia.llm.models import ChatModel, FunctionCallDirective
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
-COMPLETION_BUFFER = 200
+COMPLETION_BUFFER = 350
 
 logger = get_logger(__name__)
 
