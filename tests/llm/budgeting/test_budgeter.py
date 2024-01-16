@@ -1,27 +1,9 @@
 import pytest
 
-from lalia.chat.messages.buffer import MessageBuffer
-from lalia.chat.messages.messages import AssistantMessage, SystemMessage, UserMessage
+from lalia.chat.messages.tags import Tag
 from lalia.llm.budgeting.budgeter import Budgeter, Encoder
+from lalia.llm.budgeting.token_counter import estimate_tokens
 from lalia.llm.models import ChatModel
-
-
-@pytest.fixture
-def encoder():
-    return Encoder(ChatModel.GPT_3_5_TURBO_0613)
-
-
-@pytest.fixture()
-def message_buffer():
-    return MessageBuffer(
-        [
-            SystemMessage(content="You are a vet."),
-            UserMessage(content="Is it wise to stroke a boar?"),
-            AssistantMessage(
-                content="No, it is not wise to stroke a boar! Why would you do that?",
-            ),
-        ]
-    )
 
 
 class TestBudgeterInstantiation:
@@ -48,3 +30,17 @@ class TestBudgeterInstantiation:
     def test_budgeter_completion_buffer_exceeds_threshold(self):
         with pytest.raises(ValueError):
             Budgeter(token_threshold=30, completion_buffer=35)
+
+
+class TestBudgeterClass:
+    def test_budgeter_truncation_with_filter(self, message_buffer):
+        budgeter = Budgeter(token_threshold=20, completion_buffer=5)
+
+        truncated_messages = budgeter.truncate(
+            messages=message_buffer,
+            exclude_tags=Tag(key="kind", value="initial"),
+        )
+
+        assert len(truncated_messages) == 1
+        assert all(msg.to_base_message().role == "system" for msg in truncated_messages)
+        assert estimate_tokens(truncated_messages) <= 40 - 5

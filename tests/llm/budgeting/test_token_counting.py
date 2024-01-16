@@ -9,7 +9,7 @@ from lalia.chat.messages.messages import (
 from lalia.chat.session import Session
 from lalia.llm.budgeting.token_counter import (
     count_tokens_in_string,
-    estimate_token_count,
+    estimate_tokens,
     estimate_tokens_in_functions,
     estimate_tokens_in_messages,
     get_tokens,
@@ -84,7 +84,7 @@ class TestFunctionTokenCounting:
         # test the general token estimation function
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_token_count(session_with_function.messages, [foo_function])
+        ] == estimate_tokens(session_with_function.messages, [foo_function])
 
         # test seperate message and function token counting
         # to more reliably check for overheads
@@ -106,7 +106,7 @@ class TestFunctionTokenCounting:
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
         ] == pytest.approx(
-            estimate_token_count(session_with_function.messages, [foo_function]),
+            estimate_tokens(session_with_function.messages, [foo_function]),
             rel=max_token_deviation,
         )
 
@@ -168,9 +168,6 @@ class TestTokenCounting:
     def test_token_counting(
         self, message_buffer, message_buffer_with_function_call, foo_function
     ):
-        assert estimate_token_count(message_buffer, [foo_function]) == 114
-        assert estimate_token_count(message_buffer_with_function_call) == 43
-        assert (
-            estimate_token_count(message_buffer_with_function_call, [foo_function])
-            == 136
-        )
+        assert estimate_tokens(message_buffer, [foo_function]) == 114
+        assert estimate_tokens(message_buffer_with_function_call) == 43
+        assert estimate_tokens(message_buffer_with_function_call, [foo_function]) == 136

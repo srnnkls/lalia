@@ -15,7 +15,7 @@ from lalia.functions import get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.parsers import LLMParser, Parser
 from lalia.llm.budgeting.token_counter import (
-    estimate_token_count,
+    estimate_tokens,
     truncate_messages,
 )
 from lalia.llm.models import ChatModel, FunctionCallDirective
@@ -38,7 +38,7 @@ def _truncate_raw_messages(
         message for message in messages if message["role"] in exlude_roles
     ]
 
-    excluded_messages_tokens = estimate_token_count(
+    excluded_messages_tokens = estimate_tokens(
         messages=excluded_messages,
         model=model,
     )
@@ -59,9 +59,9 @@ def _truncate_raw_messages(
 
     logger.info(
         f"Truncated {len(list(messages))} messages with "
-        f"{estimate_token_count(messages, functions, model=model)} tokens to "
+        f"{estimate_tokens(messages, functions, model=model)} tokens to "
         f"{len(messages_truncated)} messages with "
-        f"{estimate_token_count(messages_truncated, functions, model=model)} tokens."
+        f"{estimate_tokens(messages_truncated, functions, model=model)} tokens."
     )
 
     return messages_truncated

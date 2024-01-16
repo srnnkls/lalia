@@ -1,5 +1,5 @@
 import json
-from collections import deque
+import re
 from collections.abc import Callable, Sequence
 from enum import IntEnum
 from typing import Any, overload
@@ -7,6 +7,7 @@ from typing import Any, overload
 import tiktoken
 
 from lalia.chat.messages.buffer import MessageBuffer
+from lalia.chat.messages.folds import derive_tag_predicate
 from lalia.chat.messages.messages import (
     AssistantMessage,
     BaseMessage,
@@ -15,8 +16,9 @@ from lalia.chat.messages.messages import (
     SystemMessage,
     UserMessage,
 )
+from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.formatting import format_function_as_typescript
-from lalia.functions import FunctionCallResult, Result, get_schema
+from lalia.functions import get_schema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
@@ -119,9 +121,7 @@ def estimate_tokens_in_messages(
 
 
 def estimate_tokens_in_functions(
-    functions: Sequence[
-        Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
-    ],
+    functions: Sequence[Callable[..., Any] | dict[str, Any]],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
     function_tokens = []
@@ -140,11 +140,9 @@ def estimate_tokens_in_functions(
     return sum(function_tokens)
 
 
-def estimate_token_count(
+def estimate_tokens(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-    functions: Sequence[
-        Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
-    ] = (),
+    functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
@@ -194,6 +192,15 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[dict[str, Any]] = (),
+    exclude_tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool] = lambda _: False,
 ) -> list[dict[str, Any]]:
     ...
 
@@ -204,6 +211,15 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any]] = (),
+    exclude_tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool] = lambda _: False,
 ) -> list[Message]:
     ...
 
@@ -213,13 +229,32 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any]] | Sequence[dict[str, Any]] = (),
+    exclude_tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool] = lambda _: False,
 ) -> list[Message] | list[dict[str, Any]]:
     return truncate_messages_or_buffer(
         messages=messages,
         token_threshold=token_threshold,
         completion_buffer=completion_buffer,
         functions=functions,
+        exclude_tags=exclude_tags,
     )
+
+
+def _get_message_tags(message: Message | dict[str, Any]) -> set[Tag]:
+    match message:
+        case SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage():
+            return message.tags
+        case {"tags": tags}:
+            return {Tag(**tag) for tag in tags}
+    raise ValueError("Input must be either a Message or a dictionary")
 
 
 def truncate_messages_or_buffer(
@@ -227,17 +262,31 @@ def truncate_messages_or_buffer(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
+    exclude_tags: Tag
+    | TagPattern
+    | set[Tag]
+    | set[TagPattern]
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+    | set[tuple[str | re.Pattern, str | re.Pattern]]
+    | set[dict[str | re.Pattern, str | re.Pattern]]
+    | Callable[[set[Tag]], bool] = lambda _: False,
 ) -> list[Message] | list[dict[str, Any]]:
+    exclude_predicate = derive_tag_predicate(exclude_tags)  # type: ignore
     max_tokens_usable = token_threshold - completion_buffer
-    current_tokens = estimate_token_count(messages, functions)
+    current_tokens = estimate_tokens(messages, functions)
 
-    truncated_messages = deque(messages)
-    while current_tokens > max_tokens_usable:
-        if not truncated_messages:
-            raise ValueError(
-                "All messages truncated. Remove functions or increase token threshold."
-            )
-        truncated_messages.popleft()
-        current_tokens = estimate_token_count(truncated_messages, functions)
+    truncated_messages = list(messages)
+    for message in list(truncated_messages):
+        if current_tokens <= max_tokens_usable:
+            break
+        if not exclude_predicate(_get_message_tags(message)):
+            truncated_messages.remove(message)
+            current_tokens = estimate_tokens(truncated_messages, functions)
 
-    return list(truncated_messages)  # type: ignore
+    if current_tokens > max_tokens_usable:
+        raise ValueError(
+            "All messages truncated. Remove functions or increase token threshold."
+        )
+
+    return truncated_messages  # type: ignore
