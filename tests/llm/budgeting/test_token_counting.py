@@ -168,9 +168,6 @@ class TestTokenCounting:
     def test_token_counting(
         self, message_buffer, message_buffer_with_function_call, foo_function
     ):
-        assert estimate_token_count(message_buffer, [foo_function]) == 110
-        assert estimate_token_count(message_buffer_with_function_call) == 43
-        assert (
-            estimate_token_count(message_buffer_with_function_call, [foo_function])
-            == 132
-        )
+        assert estimate_tokens(message_buffer, [foo_function]) == 110
+        assert estimate_tokens(message_buffer_with_function_call) == 43
+        assert estimate_tokens(message_buffer_with_function_call, [foo_function]) == 132
