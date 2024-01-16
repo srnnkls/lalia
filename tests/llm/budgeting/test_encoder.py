@@ -4,18 +4,6 @@ from pydantic import ValidationError
 from lalia.llm.budgeting.budgeter import Encoder
 
 
-@pytest.fixture
-def encoder():
-    return Encoder()
-
-
-@pytest.fixture
-def string_fixture():
-    """The name is intentional, because something like 'test_string' would
-    be interpreted as a test function by pytest..."""
-    return "hello world"
-
-
 def test_encoder_initialization(encoder):
     assert encoder is not None
     assert encoder.encoding_name == "cl100k_base"

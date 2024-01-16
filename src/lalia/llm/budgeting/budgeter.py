@@ -1,4 +1,4 @@
-from collections import deque
+import re
 from collections.abc import Callable, Sequence
 from enum import StrEnum
 from typing import Any, overload
@@ -9,9 +9,9 @@ from tiktoken import encoding_name_for_model, get_encoding
 
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.messages import Message
-from lalia.functions.types import FunctionCallResult, Result
+from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.llm.budgeting.token_counter import (
-    estimate_token_count,
+    estimate_tokens,
     truncate_messages_or_buffer,
 )
 from lalia.llm.models import ChatModel
@@ -68,21 +68,30 @@ class Budgeter:
         data = info.data
         if "token_threshold" in data and buffer > data["token_threshold"]:
             raise ValueError("Completion buffer cannot exceed token threshold.")
+        else:
+            return buffer
 
     def count_tokens(
         self,
         messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-        functions: Sequence[
-            Callable[..., Result | FunctionCallResult | str] | dict[str, Any]
-        ] = (),
+        functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
     ) -> int:
-        return estimate_token_count(messages, functions)
+        return estimate_tokens(messages, functions)
 
     @overload
     def truncate(
         self,
         messages: Sequence[dict[str, Any]],
         functions: Sequence[dict[str, Any]] = (),
+        exclude_tags: Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool] = lambda _: True,
     ) -> list[dict[str, Any]]:
         ...
 
@@ -90,7 +99,16 @@ class Budgeter:
     def truncate(
         self,
         messages: MessageBuffer | Sequence[Message],
-        functions: Sequence[Callable[..., Result | FunctionCallResult | str]] = (),
+        functions: Sequence[Callable[..., Any]] = (),
+        exclude_tags: Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool] = lambda _: True,
     ) -> list[Message]:
         ...
 
@@ -98,10 +116,20 @@ class Budgeter:
         self,
         messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
         functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
+        exclude_tags: Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool] = lambda _: True,
     ) -> list[Message] | list[dict[str, Any]]:
         return truncate_messages_or_buffer(
             messages=messages,
             token_threshold=self.token_threshold,
             completion_buffer=self.completion_buffer,
             functions=functions,
+            exclude_tags=exclude_tags,
         )
