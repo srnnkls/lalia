@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable, Sequence
 from enum import StrEnum
 from typing import Any, overload
@@ -9,7 +8,7 @@ from tiktoken import encoding_name_for_model, get_encoding
 
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.messages import Message
-from lalia.chat.messages.tags import Tag, TagPattern
+from lalia.functions import FunctionCallResult, Result
 from lalia.llm.budgeting.token_counter import (
     estimate_tokens,
     truncate_messages_or_buffer,

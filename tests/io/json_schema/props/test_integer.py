@@ -1,4 +1,4 @@
-from lalia.io.serialization.json_schema import IntegerProp, PropType
+from lalia.io.serialization.json_schema import IntegerProp, JsonSchemaType
 
 
 def test_integer_prop_valid_data():
@@ -6,4 +6,4 @@ def test_integer_prop_valid_data():
     assert prop.maximum == 100
     assert prop.minimum == 10
     assert prop.title == "Test Integer"
-    assert prop.type_ == PropType.INTEGER
+    assert prop.type_ == JsonSchemaType.INTEGER

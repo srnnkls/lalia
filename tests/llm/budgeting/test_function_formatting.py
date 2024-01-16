@@ -7,15 +7,14 @@ from lalia.formatting import (
     format_function_as_typescript,
     format_parameter,
     format_parameter_type,
-    format_return_type,
 )
 from lalia.functions import get_schema
-from lalia.functions.types import (
+from lalia.io.serialization.json_schema import (
     ArrayProp,
-    BoolProp,
+    BooleanProp,
+    JsonSchemaType,
     NullProp,
     NumberProp,
-    ReturnType,
     StringProp,
 )
 
@@ -42,32 +41,12 @@ def number_prop_with_enum():
 
 @pytest.fixture()
 def bool_prop():
-    return BoolProp(description="A boolean.")
+    return BooleanProp(description="A boolean.")
 
 
 @pytest.fixture()
 def null_prop():
     return NullProp(description="A null.")
-
-
-@pytest.fixture()
-def return_int():
-    return ReturnType(type=int)
-
-
-@pytest.fixture()
-def return_int_or_str():
-    return ReturnType(type=int | str)
-
-
-@pytest.fixture()
-def return_str_or_int():
-    return ReturnType(type=str | int)
-
-
-@pytest.fixture()
-def return_custom_type():
-    return ReturnType(type="MyCustomType")
 
 
 @pytest.fixture()
@@ -94,33 +73,40 @@ def foo_json_expected():
     return {
         "name": "foo",
         "parameters": {
-            "required": ["a"],
             "properties": {
-                "a": {"description": "This is a integer number.", "type": "number"},
+                "a": {
+                    "description": "This is a integer number.",
+                    "title": "A",
+                    "type": JsonSchemaType.INTEGER,
+                },
                 "b": {
                     "description": "This will be appended.",
+                    "title": "B",
                     "default": "test",
-                    "anyof": [
+                    "anyOf": [
                         {
-                            "description": "This will be appended.",
-                            "default": "test",
-                            "type": "string",
+                            "type": JsonSchemaType.STRING,
                         },
                         {
-                            "description": "This will be appended.",
-                            "default": "test",
-                            "type": "number",
+                            "type": JsonSchemaType.INTEGER,
                         },
                     ],
                 },
                 "c": {
                     "description": "This is an Enum.",
                     "default": "option1",
-                    "enum": ["option1", "option2"],
-                    "type": "string",
+                    "allOf": [
+                        {
+                            "title": "MyEnum",
+                            "enum": ["option1", "option2"],
+                            "type": JsonSchemaType.STRING,
+                        }
+                    ],
                 },
             },
-            "type": "object",
+            "required": ["a"],
+            "type": JsonSchemaType.OBJECT,
+            "additionalProperties": False,
         },
         "description": "This is a test function.\nIt combines number a, appends string b and option c.",
     }
@@ -135,16 +121,16 @@ def function_schema(foo_function):
 
 class TestDesciptionFormatting:
     def test_description_formatting(self):
-        assert format_description("Test description") == "// Test description"
+        assert format_description("Test description") == "\n// Test description"
         # multiline descriptions should be converted to single line
         assert (
-            format_description("Multiline\ndescription") == "// Multiline description"
+            format_description("Multiline\ndescription") == "\n// Multiline description"
         )
         assert format_description(
             "Multiline\ndescription with some\nmore lines\n"
             "than usual.\n\nAlso a paragraph."
         ) == (
-            "// Multiline description with some more lines "
+            "\n// Multiline description with some more lines "
             "than usual. Also a paragraph."
         )
 
@@ -192,51 +178,37 @@ class TestParameterTypeFormatting:
         assert format_parameter_type(number_prop_with_enum) != "'0' | '1'"
 
 
-class TestReturnTypeFormatting:
-    def test_number_type(self, return_int):
-        assert format_return_type(return_int) == "number"
-
-    def test_custom_type(self, return_custom_type):
-        assert format_return_type(return_custom_type) == "any"
-
-    def test_union_type(self, return_int_or_str, return_str_or_int):
-        assert format_return_type(return_str_or_int) == "string | number"
-        assert format_return_type(return_str_or_int) != "number | string"
-        assert format_return_type(return_int_or_str) != "string | number"
-        assert format_return_type(return_int_or_str) == "number | string"
-
-
 class TestParameterFormatting:
     def test_parameters(self, string_prop, number_prop, bool_prop, null_prop):
-        assert format_parameter("name", string_prop) == "// A string.\nname: string;"
-        assert format_parameter("name", number_prop) == "// A number.\nname: number;"
-        assert format_parameter("name", bool_prop) == "// A boolean.\nname: boolean;"
-        assert format_parameter("name", null_prop) == "// A null.\nname: null;"
+        assert format_parameter("name", string_prop) == "\n// A string.\nname: string;"
+        assert format_parameter("name", number_prop) == "\n// A number.\nname: number;"
+        assert format_parameter("name", bool_prop) == "\n// A boolean.\nname: boolean;"
+        assert format_parameter("name", null_prop) == "\n// A null.\nname: null;"
 
     def test_array_parameters(self, string_prop, number_prop, bool_prop, null_prop):
         assert (
             format_parameter(
                 "numbers", ArrayProp(description="Array of numbers.", items=number_prop)
             )
-            == "// Array of numbers.\nnumbers: number[];"
+            == "\n// Array of numbers.\nnumbers: number[];"
         )
         assert (
             format_parameter(
                 "strings", ArrayProp(description="Array of strings.", items=string_prop)
             )
-            == "// Array of strings.\nstrings: string[];"
+            == "\n// Array of strings.\nstrings: string[];"
         )
         assert (
             format_parameter(
                 "bools", ArrayProp(description="Array of bools.", items=bool_prop)
             )
-            == "// Array of bools.\nbools: boolean[];"
+            == "\n// Array of bools.\nbools: boolean[];"
         )
         assert (
             format_parameter(
                 "nulls", ArrayProp(description="Array of nulls.", items=null_prop)
             )
-            == "// Array of nulls.\nnulls: null[];"
+            == "\n// Array of nulls.\nnulls: null[];"
         )
 
     def test_default_formatting(self):
@@ -245,35 +217,35 @@ class TestParameterFormatting:
                 "sigma",
                 NumberProp(description="A number with default.", default=42),
             )
-            == "// A number with default.\nsigma?: number;"
+            == "\n// A number with default.\nsigma?: number;"
         )
         assert (
             format_parameter(
                 "name",
                 StringProp(description="A string with default.", default="unknown"),
             )
-            == "// A string with default.\nname?: string;"
+            == "\n// A string with default.\nname?: string;"
         )
         assert (
             format_parameter(
                 "do_stuff",
-                BoolProp(description="A boolean with default.", default=True),
+                BooleanProp(description="A boolean with default.", default=True),
             )
-            == "// A boolean with default.\ndo_stuff?: boolean;"
+            == "\n// A boolean with default.\ndo_stuff?: boolean;"
         )
         assert (
             format_parameter(
                 "sigma",
                 NumberProp(description="A number without default."),
             )
-            == "// A number without default.\nsigma: number;"
+            == "\n// A number without default.\nsigma: number;"
         )
         assert (
             format_parameter(
                 "name",
                 StringProp(description="A string without default."),
             )
-            == "// A string without default.\nname: string;"
+            == "\n// A string without default.\nname: string;"
         )
 
 
@@ -286,70 +258,5 @@ class TestFunctionFormatting:
 class TestSerialization:
     def test_function_serialization(self, foo_function, foo_json_expected):
         func_schema = get_schema(foo_function)
-        func_json = func_schema.to_json_schema()
+        func_json = func_schema.to_dict()
         assert func_json == foo_json_expected
-
-    def test_string_prop_serialization(self, string_prop):
-        assert string_prop.to_json_schema() == {
-            "description": "Represents a property of type string in a function signature.",
-            "properties": {
-                "description": {
-                    "anyOf": [{"type": "string"}, {"type": "null"}],
-                    "default": None,
-                    "title": "Description",
-                },
-                "default": {
-                    "anyOf": [{}, {"type": "null"}],
-                    "default": None,
-                    "title": "Default",
-                },
-                "enum": {
-                    "anyOf": [
-                        {"items": {"type": "string"}, "type": "array"},
-                        {"type": "null"},
-                    ],
-                    "default": None,
-                    "title": "Enum",
-                },
-            },
-            "title": "StringProp",
-            "type": "object",
-        }
-
-    def test_number_prop_serialization(self, number_prop):
-        assert number_prop.to_json_schema() == {
-            "description": "Represents a property of type number in a function signature.",
-            "properties": {
-                "description": {
-                    "anyOf": [{"type": "string"}, {"type": "null"}],
-                    "default": None,
-                    "title": "Description",
-                },
-                "default": {
-                    "anyOf": [{}, {"type": "null"}],
-                    "default": None,
-                    "title": "Default",
-                },
-                "minimum": {
-                    "anyOf": [{"type": "integer"}, {"type": "null"}],
-                    "default": None,
-                    "title": "Minimum",
-                },
-                "maximum": {
-                    "anyOf": [{"type": "integer"}, {"type": "null"}],
-                    "default": None,
-                    "title": "Maximum",
-                },
-                "enum": {
-                    "anyOf": [
-                        {"items": {"type": "integer"}, "type": "array"},
-                        {"items": {"type": "number"}, "type": "array"},
-                        {"type": "null"},
-                    ],
-                    "default": None,
-                    "title": "Enum",
-                },
-            },
-            "title": "NumberProp",
-            "type": "object",
-        }

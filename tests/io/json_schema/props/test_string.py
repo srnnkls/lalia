@@ -1,4 +1,4 @@
-from lalia.io.serialization.json_schema import PropType, StringProp
+from lalia.io.serialization.json_schema import JsonSchemaType, StringProp
 
 
 def test_string_prop_valid_data():
@@ -12,4 +12,4 @@ def test_string_prop_valid_data():
     assert prop.min_length == 1
     assert prop.pattern == r"^[a-zA-Z]+$"
     assert prop.enum == ["abc", "def"]
-    assert prop.type_ == PropType.STRING
+    assert prop.type_ == JsonSchemaType.STRING
