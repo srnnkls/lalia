@@ -169,20 +169,23 @@ def expected_custom_schema_object():
                         title="E",
                         enum=[0, 1],
                     )
-                ]
+                ],
+                default=1,
             ),
             "v": AnyOfProp(  # type: ignore
                 anyOf=[  # type: ignore
                     IntegerProp(),
                     StringProp(),
                     NullProp(),
-                ]
+                ],
+                title="V",
             ),
             "n": AnyOfProp(  # type: ignore
                 anyOf=[  # type: ignore
                     IntegerProp(),
                     NullProp(),
-                ]
+                ],
+                title="N",
             ),
         },
         required=["i", "f", "b", "fi", "s", "c"],

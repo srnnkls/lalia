@@ -17,7 +17,7 @@ from lalia.llm.openai import ChatCompletionResponse, ChatModel, FunctionCallDire
 
 def get_restricted_schema(func):
     schema = get_schema(func)
-    restricted_schema = schema.to_json_schema()["parameters"]
+    restricted_schema = schema.to_dict()["parameters"]
     restricted_schema["additionalProperties"] = False
     return restricted_schema
 

@@ -18,7 +18,7 @@ from lalia.chat.messages.messages import (
 )
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.formatting import format_function_as_typescript
-from lalia.functions import get_schema
+from lalia.functions import FunctionCallResult, FunctionSchema, Result, get_schema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
@@ -128,9 +128,9 @@ def estimate_tokens_in_functions(
     for function in functions:
         match function:
             case Callable():
-                function_schema = get_schema(function).to_json_schema()
+                function_schema = get_schema(function)
             case dict():
-                function_schema = function
+                function_schema = FunctionSchema(**function)
             case _:
                 raise ValueError("Input must be either a Callable or a dictionary")
 
@@ -157,23 +157,9 @@ def estimate_tokens(
     if functions:
         for message in messages:
             match message:
-                case (
-                    SystemMessage()
-                    | UserMessage()
-                    | AssistantMessage()
-                    | FunctionMessage()
-                ):
-                    base_message = message.to_base_message()
-                case dict():
-                    base_message = BaseMessage(**message)
-                case _:
-                    raise ValueError(
-                        "Input must be either a MessageBuffer or a a sequence of "
-                        "Messages or raw dictionaries"
-                    )
-            if base_message.role.name == "system":
-                tokens.append(Overhead.SYSTEM_ROLE)
-                break
+                case SystemMessage() | {"role": "system"}:
+                    tokens.append(Overhead.SYSTEM_ROLE)
+                    break
 
     # only add specific function call tokens, if its 'auto' add nothing
     if function_call != FunctionCallDirective.AUTO:

@@ -2,18 +2,15 @@ from inspect import cleandoc
 
 FUNCTION_TEMPLATE = cleandoc(
     """
-    namespace functions {{
-    {description}
-      type {name} = (_: {{
-    {parameters}
-      }}) => {return_type};
+    namespace functions {{{description}
+      type {name} = (_: {{{parameters}
+      }}) => any;
     }} // namespace functions
     """
 )
 PARAMETER_TEMPLATE = cleandoc(
-    """
-    {description}
+    """{description}
     {name}{optional}: {type_};
     """
 )
-DESCRIPTION_TEMPLATE = "// {description}"
+DESCRIPTION_TEMPLATE = "\n// {description}"

@@ -195,9 +195,7 @@ class OpenAIChat:
             model = self.model
 
         func_schemas = (
-            [get_schema(func).to_json_schema() for func in functions]
-            if functions
-            else []
+            [get_schema(func).to_dict() for func in functions] if functions else []
         )
 
         raw_response = self.complete_raw(

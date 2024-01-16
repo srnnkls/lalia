@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from types import BuiltinFunctionType, FunctionType
 from typing import (
     Annotated,
     Any,
+    Generic,
     ParamSpec,
     TypeVar,
     get_origin,
@@ -13,18 +15,13 @@ from typing import (
 
 from jsonref import replace_refs
 from pydantic import TypeAdapter, ValidationError, validate_call
+from pydantic.dataclasses import dataclass
 
-from lalia.functions.types import (
-    BaseProp,
-    Error,
-    FunctionCallResult,
-    FunctionSchema,
-    ObjectProp,
-    Result,
-    ReturnType,
-)
-from lalia.functions.utils import is_callable_instance
+from lalia.chat.finish_reason import FinishReason
 from lalia.io.logging import get_logger
+
+# need to import Prop so FunctionSchema is correctly defined for pydantic
+from lalia.io.serialization.json_schema import ObjectProp, Prop  # noqa
 
 logger = get_logger(__name__)
 
@@ -32,6 +29,64 @@ logger = get_logger(__name__)
 T = TypeVar("T")
 A = TypeVar("A")
 P = ParamSpec("P")
+
+
+@dataclass
+class Error:
+    message: str
+
+
+@dataclass
+class Result:
+    """
+    An anonymous result type that wraps a result or an error.
+    """
+
+    value: Any | None = None
+    error: Error | None = None
+    finish_reason: FinishReason = FinishReason.DELEGATE
+
+
+@dataclass
+class FunctionCallResult(Generic[A, T]):
+    """
+    A result type that is a superset of `Result` containg additional metadata.
+    """
+
+    name: str
+    arguments: dict[str, A]
+    value: T | None = None
+    error: Error | None = None
+    finish_reason: FinishReason = FinishReason.DELEGATE
+
+    def to_string(self) -> str:
+        match self.error, self.value:
+            case None, result:
+                return str(result)
+            case Error(message), None:
+                return f"Error: {message}"
+            case _:
+                raise ValueError("Either `error` or `result` must be `None`")
+
+
+@dataclass
+class FunctionSchema:
+    """Describes a function schema, including its parameters."""
+
+    name: str
+    parameters: ObjectProp | None = None
+    description: str = ""
+
+    def to_dict(self) -> dict:
+        return TypeAdapter(type(self)).dump_python(
+            self, exclude_none=True, by_alias=True
+        )
+
+
+def is_callable_instance(callable_: object) -> bool:
+    if not callable(callable_):
+        return False
+    return not isinstance(callable_, FunctionType | BuiltinFunctionType)
 
 
 def dereference_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -54,9 +109,7 @@ def get_callable(callable_: Callable[P, T]) -> Callable[P, T]:
     return callable_
 
 
-def get_schema(
-    callable_: Callable[..., Any], include_return_types: bool = False
-) -> FunctionSchema:
+def get_schema(callable_: Callable[..., Any]) -> FunctionSchema:
     if is_callable_instance(callable_):
         func = callable_.__call__
         name = getattr(callable_, "name", type(callable_).__name__)
@@ -73,45 +126,22 @@ def get_schema(
     adapter = TypeAdapter(validate_call(func))
     func_schema = dereference_schema(adapter.json_schema())
 
-    properties = {}
-    required_params = []
+    type_hints = get_type_hints(func, include_extras=True)
 
-    for param_name, param_info in func_schema["properties"].items():
-        if "required" in func_schema and param_name in func_schema["required"]:
-            required_params.append(param_name)
-
-        type_hints = get_type_hints(func, include_extras=True)
-        annotation = type_hints.get(param_name)
+    for prop_name, _ in func_schema["properties"].items():
+        annotation = type_hints.get(prop_name)
         if annotation and get_origin(annotation) is Annotated:
             description = next(iter(annotation.__metadata__), "")
         else:
             description = ""
 
-        properties[param_name] = BaseProp.parse_type_and_description(param_info)
-        properties[param_name].description = description
+        func_schema["properties"][prop_name]["description"] = description
 
-    # TODO: ObjectProp needs to get VariantProp too
-    function_parameters = ObjectProp(
-        properties=properties,
-        required=required_params if required_params else None,
-    )
-
-    if include_return_types:
-        return_type_hint = (
-            get_type_hints(func).get("return", None) if include_return_types else "any"
-        )
-        return_type = ReturnType(type=return_type_hint)
-    else:
-        return_type = None
-
-    function_schema = FunctionSchema(
+    return FunctionSchema(
         name=name,
         description=inspect.cleandoc(doc) if doc else "",
-        parameters=function_parameters,
-        return_type=return_type,
+        parameters=ObjectProp(**func_schema),
     )
-
-    return function_schema
 
 
 def execute_function_call(
