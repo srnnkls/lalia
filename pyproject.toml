@@ -110,6 +110,9 @@ profile = "black"
 [tool.ruff.flake8-tidy-imports]
 ban-relative-imports = "all"
 
+[tool.ruff.pep8-naming]
+classmethod-decorators = ['lalia.utils.decorators.classproperty']
+
 [tool.ruff.per-file-ignores]
 # Tests can use magic values, assertions, and relative imports
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
