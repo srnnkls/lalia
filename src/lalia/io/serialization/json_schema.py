@@ -12,6 +12,8 @@ from pydantic import (
 from pydantic.alias_generators import to_camel, to_snake
 from pydantic.dataclasses import dataclass
 
+from lalia.utils.decorators import classproperty
+
 
 class PropDiscriminator(StrEnum):
     TYPE = "type_"
@@ -31,8 +33,7 @@ class JsonSchemaType(StrEnum):
     OBJECT = "object"
     NULL = "null"
 
-    @classmethod
-    @property
+    @classproperty
     def discriminator(cls) -> PropDiscriminator:
         return PropDiscriminator.TYPE
 
@@ -43,8 +44,7 @@ class JsonSchemaComposite(StrEnum):
     ALL_OF = "allOf"
     NOT_ = "not"
 
-    @classmethod
-    @property
+    @classproperty
     def discriminator(cls) -> str:
         return PropDiscriminator.COMPOSITE
 
