@@ -1,10 +1,15 @@
 import importlib
 from collections.abc import Callable, Sequence
+from types import BuiltinFunctionType, FunctionType
 from typing import Any, ClassVar
 
 from pydantic import TypeAdapter
 
-from lalia.functions import is_callable_instance
+
+def is_callable_instance(callable_: object) -> bool:
+    if not callable(callable_):
+        return False
+    return not isinstance(callable_, FunctionType | BuiltinFunctionType)
 
 
 def _import_by_qualname(qualname: str) -> Callable[..., Any]:

@@ -24,6 +24,7 @@ from lalia.chat.messages.buffer import DEFAULT_FOLD_TAGS, MessageBuffer
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.functions import (
     Error,
+    Function,
     FunctionCallResult,
     execute_function_call,
     get_name,
@@ -31,7 +32,6 @@ from lalia.functions import (
 from lalia.io.logging import get_logger
 from lalia.io.serialization.functions import (
     CallableRegistry,
-    parse_callables,
     serialize_callable,
     serialize_callables,
 )
@@ -68,7 +68,7 @@ class Session:
         default_factory=lambda: DEFAULT_FOLD_TAGS
     )
     messages: MessageBuffer = field(default_factory=MessageBuffer)
-    functions: Sequence[Callable[..., Any]] = ()
+    functions: Sequence[Function[..., Any]] = ()
     failure_messages: Sequence[Message] = field(
         default_factory=lambda: [UserMessage(content=FAILURE_QUERY)]
     )
@@ -100,18 +100,6 @@ class Session:
         if callable(callable_ := tags):
             return serialize_callable(callable_)
         raise AssertionError("Unreachable")
-
-    @field_validator("functions", mode="before")
-    @classmethod
-    def parse_functions(
-        cls, functions: Sequence[Callable[..., Any]] | Sequence[dict[str, Any]]
-    ) -> list[Callable[..., Any]]:
-        return parse_callables(functions)
-
-    @field_validator("system_message", mode="before")
-    @classmethod
-    def parse_system_message(cls, message: str | SystemMessage) -> SystemMessage:
-        return SystemMessage(content=message) if isinstance(message, str) else message
 
     @classmethod
     def from_storage(

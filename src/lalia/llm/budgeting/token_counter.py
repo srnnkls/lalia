@@ -1,16 +1,17 @@
 import json
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from enum import IntEnum
 from typing import Any, overload
 
 import tiktoken
+from pydantic import TypeAdapter
 
 from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.folds import derive_tag_predicate
 from lalia.chat.messages.messages import (
     AssistantMessage,
-    BaseMessage,
+    FunctionCall,
     FunctionMessage,
     Message,
     SystemMessage,
@@ -18,21 +19,74 @@ from lalia.chat.messages.messages import (
 )
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.formatting import format_function_as_typescript
-from lalia.functions import FunctionCallResult, FunctionSchema, Result, get_schema
+from lalia.functions import FunctionSchema, get_schema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
 
 class Overhead(IntEnum):
     MESSAGE_NAME = -1
-    MESSAGE_INSTANCE = 3
+    MESSAGE_INSTANCE = 4
     SYSTEM_ROLE = -4
-    ROLE = 1
     FUNCTION_ROLE = -2
     FUNCTION_CALL = 3
     FUNCTION_NAME = 4
     FUNCTION_DEFINITION = 8
     NONE_FUNCTION_CALL = 1
     COMPLETION = 3
+
+
+def _estimate_tokens_in_message(
+    message: Message, model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+) -> int:
+    message_tokens = []
+    match message:
+        case SystemMessage():
+            message_tokens.append(Overhead.SYSTEM_ROLE)
+        case FunctionMessage(name=name):
+            message_tokens.append(
+                get_tokens(name, overhead=Overhead.MESSAGE_NAME, model_name=model_name)
+            )
+        case AssistantMessage(
+            function_call=FunctionCall(name=name, arguments=arguments)
+        ):
+            message_tokens.append(get_tokens(name, model_name=model_name))
+            # TODO: centralize argument dumping
+            message_tokens.append(
+                get_tokens(json.dumps(arguments), model_name=model_name)
+            )
+            message_tokens.append(Overhead.FUNCTION_CALL)
+        case FunctionMessage():
+            message_tokens.append(Overhead.FUNCTION_ROLE)
+
+    message_tokens.append(
+        get_tokens(
+            message.content, overhead=Overhead.MESSAGE_INSTANCE, model_name=model_name
+        )
+    )
+
+    return sum(message_tokens)
+
+
+def _iterate_tokens_in_messages(
+    messages: MessageBuffer | Sequence[Message | dict[str, Any]],
+    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+) -> Iterator[int]:
+    adapter = TypeAdapter(Message)
+
+    for message in messages:
+        match message:
+            case dict() as raw_message:
+                message_parsed = adapter.validate_python(raw_message)
+                yield _estimate_tokens_in_message(message_parsed, model_name)
+            case (
+                SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
+            ):
+                yield _estimate_tokens_in_message(message, model_name)
+            case _:
+                raise ValueError(
+                    "Input must be either a MessageBuffer or a a sequence of "
+                    "Messages or raw messages"
+                )
 
 
 def count_tokens_in_string(
@@ -55,69 +109,7 @@ def estimate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
-    message_tokens = []
-
-    for message in messages:
-        match message:
-            case (
-                SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
-            ):
-                base_message = message.to_base_message()
-            case dict():
-                base_message = BaseMessage(**message)
-            case _:
-                raise ValueError(
-                    "Input must be either a MessageBuffer or a a sequence of Messages"
-                    "or raw dictionaries"
-                )
-
-        # role tokens
-        message_tokens.append(Overhead.ROLE)
-
-        # SYSTEM role overhead
-        if base_message.role == "system":
-            message_tokens.append(Overhead.SYSTEM_ROLE)
-
-        # name tokens
-        # if there's a name, the role is omitted, role is always required and always 1
-        message_tokens.append(
-            get_tokens(
-                base_message.name,
-                overhead=Overhead.MESSAGE_NAME,
-                model_name=model_name,
-            )
-        )
-
-        # content tokens
-        message_tokens.append(get_tokens(base_message.content, model_name=model_name))
-
-        if base_message.function_call:
-            # function call name
-            message_tokens.append(
-                get_tokens(base_message.function_call["name"], model_name=model_name)
-            )
-
-            # function call arguments
-            message_tokens.append(
-                get_tokens(
-                    json.dumps(base_message.function_call["arguments"]),
-                    model_name=model_name,
-                )
-            )
-
-            # function call overhead
-            message_tokens.append(Overhead.FUNCTION_CALL)
-
-        # function role tokens
-        message_tokens.append(
-            Overhead.FUNCTION_ROLE if base_message.role.name == "function" else 0
-        )
-
-        message_tokens.append(Overhead.MESSAGE_INSTANCE)
-
-    message_tokens.append(Overhead.COMPLETION)
-
-    return sum(message_tokens)
+    return sum(_iterate_tokens_in_messages(messages, model_name)) + Overhead.COMPLETION
 
 
 def estimate_tokens_in_functions(
@@ -240,7 +232,7 @@ def _get_message_tags(message: Message | dict[str, Any]) -> set[Tag]:
             return message.tags
         case {"tags": tags}:
             return {Tag(**tag) for tag in tags}
-    raise ValueError("Input must be either a Message or a dictionary")
+    return set()
 
 
 def truncate_messages_or_buffer(

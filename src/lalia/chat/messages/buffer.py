@@ -7,16 +7,12 @@ from dataclasses import KW_ONLY, InitVar, field
 from itertools import chain
 from typing import Any
 
-from pydantic import field_validator
 from pydantic.dataclasses import dataclass
 from rich.console import Console
 
 from lalia.chat.messages.folds import DEFAULT_FOLD_TAGS, Folds, derive_tag_predicate
-from lalia.chat.messages.messages import BaseMessage, Message
-from lalia.chat.messages.tags import (
-    Tag,
-    TagPattern,
-)
+from lalia.chat.messages.messages import Message
+from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.io.logging import get_logger
 from lalia.io.renderers import MessageBufferRender
 
@@ -35,22 +31,6 @@ class MessageBuffer(Sequence[Message]):
         set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]
     ] = DEFAULT_FOLD_TAGS
     verbose: bool = False
-
-    @field_validator("messages", "pending", mode="before")
-    @classmethod
-    def parse_mesages(
-        cls, messages: list[Message | BaseMessage | dict[str, Any]]
-    ) -> list[Message]:
-        parsed_messages = []
-        for message in messages:
-            match message:
-                case BaseMessage():
-                    parsed_messages.append(message.parse())
-                case dict():
-                    parsed_messages.append(BaseMessage(**message).parse())
-                case _:
-                    parsed_messages.append(message)
-        return parsed_messages
 
     def __post_init__(self, default_fold_tags):
         self._default_fold_tags = default_fold_tags
