@@ -16,7 +16,6 @@ from lalia.functions import dereference_schema, get_callable, get_schema
 
 if TYPE_CHECKING:
     from lalia.llm import LLM
-from lalia.chat.messages import to_raw_messages
 from lalia.io.logging import get_logger
 
 logger = get_logger(__name__)
@@ -96,7 +95,7 @@ class LLMParser:
         self,
         payload: str,
         function_call_schema: dict[str, Any],
-        messages: Sequence[dict[str, Any]],
+        messages: Sequence[Message],
         llm: LLM,
         exception: Exception,
     ) -> tuple[str, FunctionMessage]:
@@ -136,7 +135,7 @@ class LLMParser:
         logger.debug(error_message)
 
         response = llm.complete_raw(
-            messages=[*messages, error_message.to_base_message().to_raw_message()],
+            messages=[*messages, error_message],
             functions=[function_call_schema],
             function_call={"name": function_call_schema["name"]},
         )
@@ -176,7 +175,6 @@ class LLMParser:
         function_call_schema: dict[str, Any],
         messages: Sequence[Message] = (),
     ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
-        raw_messages = to_raw_messages(messages)
         error_messages: list[FunctionMessage] = []
         for llm in self.llms:
             for _ in range(self.max_retries):
@@ -192,13 +190,7 @@ class LLMParser:
                     payload, error_message = self._complete_invalid_input(
                         payload=payload,
                         function_call_schema=function_call_schema,
-                        messages=[
-                            *raw_messages,
-                            *[
-                                error_message.to_base_message().to_raw_message()
-                                for error_message in error_messages
-                            ],
-                        ],
+                        messages=[*messages, *error_messages],
                         llm=llm,
                         exception=e,
                     )

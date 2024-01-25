@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
@@ -5,14 +6,16 @@ from enum import StrEnum
 from typing import Any
 
 from openai import OpenAI
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.dataclasses import dataclass
 
 from lalia.chat.completions import Choice
-from lalia.chat.messages import Message, SystemMessage, UserMessage, to_raw_messages
+from lalia.chat.messages import Message, SystemMessage, UserMessage
+from lalia.chat.messages.messages import FunctionCall
 from lalia.chat.messages.tags import TagPattern
-from lalia.functions import get_name, get_schema
+from lalia.functions import FunctionSchema, get_name, get_schema
 from lalia.io.logging import get_logger
+from lalia.io.models.openai import ChatCompletionRequestMessage
 from lalia.io.parsers import LLMParser, Parser
 from lalia.llm.budgeting.token_counter import (
     estimate_tokens,
@@ -25,6 +28,56 @@ FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 COMPLETION_BUFFER = 350
 
 logger = get_logger(__name__)
+
+
+def _to_openai_raw_message(message: Message | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(message, dict):
+        return message
+
+    adapter = TypeAdapter(type(message))
+    raw_message = {
+        field: value
+        for field, value in adapter.dump_python(message, exclude_none=True).items()
+        if field in ChatCompletionRequestMessage.model_fields
+    }
+    match raw_message:
+        case {
+            "role": "assistant",
+            "function_call": {"name": name, "arguments": arguments},
+        }:
+            # TODO: Centralize argument dumping
+            raw_message["function_call"] = {
+                "name": name,
+                "arguments": json.dumps(arguments),
+            }
+    return raw_message
+
+
+def _to_openai_raw_messages(
+    messages: Sequence[Message | dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return [_to_openai_raw_message(message) for message in messages]
+
+
+def _to_open_ai_raw_function_schema(
+    func: Callable[..., Any] | FunctionSchema | dict[str, Any]
+) -> dict[str, Any]:
+    match func:
+        case FunctionSchema() as func_schema:
+            return func_schema.to_dict()
+        case dict() as raw_func_schema:
+            return FunctionSchema(**raw_func_schema).to_dict()
+        case Callable():
+            return get_schema(func).to_dict()
+    raise ValueError(f"Cannot convert {func} to OpenAI function schema.")
+
+
+def _to_open_ai_raw_function_schemas(
+    funcs: Sequence[Callable[..., Any]]
+    | Sequence[FunctionSchema]
+    | Sequence[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return [_to_open_ai_raw_function_schema(func) for func in funcs]
 
 
 def _truncate_raw_messages(
@@ -94,11 +147,11 @@ class ChatCompletionResponse:
 
 @dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
 class OpenAIChat:
-    model: ChatModel
     api_key: InitVar[str]
+    model: ChatModel
     temperature: float = 1.0
     max_retries: int = 5
-    parser: InitVar[Parser | None] = None
+    parser: Parser | None = Field(None, exclude=True)
     failure_messages: list[Message] = field(
         default_factory=lambda: [
             UserMessage(FAILURE_QUERY),
@@ -106,17 +159,28 @@ class OpenAIChat:
     )
     completion_buffer: int = COMPLETION_BUFFER
 
-    def __post_init__(self, api_key: str, parser: Parser | None):
+    @model_validator(mode="before")
+    @classmethod
+    def _set_up_parser(cls, data: Any) -> Any:
+        if "parser" not in data.kwargs:
+            parser = LLMParser(
+                llms=[
+                    cls(
+                        *data.args,
+                        **data.kwargs,
+                        # of course, the parser's LLM has to be parserless to avoid
+                        # infinite recursion
+                        parser=None,
+                    )
+                ]
+            )
+            data.kwargs["parser"] = parser
+        return data
+
+    def __post_init__(self, api_key: str):
         self._api_key = api_key
         self._responses: list[dict[str, Any]] = []
         self._client = OpenAI(api_key=api_key)
-
-        if parser is None:
-            self._parser = LLMParser(
-                llms=[self],
-            )
-        else:
-            self._parser = parser
 
     def _complete_failure(self, messages: Sequence[Message]) -> ChatCompletionResponse:
         messages = list(messages)
@@ -144,23 +208,21 @@ class OpenAIChat:
         messages: Sequence[Message] = (),
         context: set[TagPattern] | None = None,
     ) -> dict[str, Any]:
-        if context is None:
-            context = set()
-
-        if (
-            function_call := response["choices"][0]["message"].get("function_call")
-        ) is not None:
+        if self.parser is None:
+            return response
+        function_call = response["choices"][0]["message"].get("function_call")
+        if function_call is not None:
             name = function_call["name"]
             payload = function_call["arguments"]
             func = next(func for func in functions if get_name(func) == name)
-            args, parsing_error_messages = self._parser.parse_function_call_args(
+            args, parsing_error_messages = self.parser.parse_function_call_args(
                 payload=payload,
                 function=func,
                 messages=messages,
             )
             function_call["function"] = func
             function_call["arguments"] = args
-            function_call["context"] = context
+            function_call["context"] = context or set()
             function_call["parsing_error_messages"] = parsing_error_messages
             return response
         else:
@@ -194,12 +256,10 @@ class OpenAIChat:
         if model is None:
             model = self.model
 
-        func_schemas = (
-            [get_schema(func).to_dict() for func in functions] if functions else []
-        )
+        func_schemas = _to_open_ai_raw_function_schemas(functions)
 
         raw_response = self.complete_raw(
-            messages=to_raw_messages(messages),
+            messages=messages,
             model=model,
             functions=func_schemas,
             function_call=function_call,
@@ -215,7 +275,7 @@ class OpenAIChat:
             timeout=timeout,
         )
 
-        if functions:
+        if functions and self.parser is not None:
             raw_response = self._parse_function_call_args(
                 raw_response, functions, messages, context
             )
@@ -226,7 +286,7 @@ class OpenAIChat:
 
     def complete_raw(
         self,
-        messages: Sequence[dict[str, Any]],
+        messages: Sequence[Message | dict[str, Any]],
         model: ChatModel | None = None,
         functions: Sequence[dict[str, Any]] = (),
         function_call: FunctionCallDirective
@@ -251,9 +311,11 @@ class OpenAIChat:
         if model is None:
             model = self.model
 
+        raw_messages = _to_openai_raw_messages(messages)
+
         # TODO: Pass context tags
         messages_truncated = _truncate_raw_messages(
-            messages=messages,
+            messages=raw_messages,
             model=model,
             functions=functions,
             completion_buffer=self.completion_buffer,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import fields
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypeGuard, get_args
 
@@ -13,6 +14,8 @@ from pydantic.alias_generators import to_camel, to_snake
 from pydantic.dataclasses import dataclass
 
 from lalia.utils.decorators import classproperty
+
+JSON_SCHEMA_ANY_TAG = "any"
 
 
 class PropDiscriminator(StrEnum):
@@ -50,6 +53,12 @@ class JsonSchemaComposite(StrEnum):
 
     def to_snake(self) -> str:
         return to_snake(self.value)
+
+
+@dataclass
+class AnyProp:
+    description: str | None = None
+    title: str | None = None
 
 
 @dataclass
@@ -187,8 +196,12 @@ def discriminate_prop(payload: Any) -> str | None:
             return JsonSchemaType.discriminator
         elif any(composite_type in payload for composite_type in JsonSchemaComposite):
             return JsonSchemaComposite.discriminator
+        elif any(field.name in payload for field in fields(AnyProp)):
+            return JSON_SCHEMA_ANY_TAG
 
     elif is_type_prop(payload):
+        if isinstance(payload, AnyProp):
+            return JSON_SCHEMA_ANY_TAG
         return JsonSchemaType.discriminator
     elif is_composite_prop(payload):
         return JsonSchemaComposite.discriminator
@@ -215,6 +228,7 @@ CompositeProp = Annotated[
 
 Prop = Annotated[
     Annotated[TypeProp, Tag(JsonSchemaType.discriminator)]
+    | Annotated[AnyProp, Tag(JSON_SCHEMA_ANY_TAG)]
     | Annotated[CompositeProp, Tag(JsonSchemaComposite.discriminator)],
     Discriminator(discriminate_prop),
 ]
@@ -222,7 +236,7 @@ Prop = Annotated[
 
 TYPE_PROP_UNION = get_args(TypeProp)[0]
 COMPOSITE_PROP_UNION = tuple(
-    [get_args(prop)[0] for prop in get_args(get_args(CompositeProp)[0])]
+    get_args(prop)[0] for prop in get_args(get_args(CompositeProp)[0])
 )
 
 

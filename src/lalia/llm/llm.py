@@ -37,7 +37,7 @@ class LLM(Protocol):
 
     def complete_raw(
         self,
-        messages: Sequence[dict[str, Any]],
+        messages: Sequence[Message | dict[str, Any]],
         model: ChatModel | None = None,
         functions: Sequence[dict[str, Any]] = (),
         function_call: FunctionCallDirective

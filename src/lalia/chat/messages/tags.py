@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
-from dataclasses import InitVar, field
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import KW_ONLY
 from enum import StrEnum
-from typing import ClassVar, Generic, TypeGuard, TypeVar, cast
+from typing import ClassVar, TypeGuard, cast
 
 from pydantic import Field, ValidationInfo, field_validator, validate_call
 from pydantic.dataclasses import dataclass
@@ -17,6 +17,7 @@ from lalia.io.renderers import TagColor, TagRenderer
 class DefaultTagKeys(StrEnum):
     ERROR = "error"
     FUNCTION = "function"
+    SYSTEM = "system"
 
 
 GROUP_COLORS_BY_KEY = True
@@ -188,6 +189,7 @@ class _Not(_PredicateOperator):
 class Tag:
     key: str
     value: str
+    _: KW_ONLY
     color: TagColor | None = Field(validate_default=True, default=None)
 
     group_colors_by_key: ClassVar[bool] = GROUP_COLORS_BY_KEY
@@ -209,9 +211,14 @@ class Tag:
         return color
 
     @classmethod
-    def from_dict(cls, tag: dict[str, str]) -> Tag:
+    def from_dict(cls, tag: dict[str, str], *, color: TagColor | None = None) -> Tag:
         key, value = next(iter(tag.items()))
-        return cls(key=key, value=value)
+        return cls(key=key, value=value, color=color)
+
+    @classmethod
+    def from_iterable(cls, tag: Iterable[str], *, color: TagColor | None = None) -> Tag:
+        key, value, *_ = tag
+        return cls(key=key, value=value, color=color)
 
     @classmethod
     @validate_call
@@ -255,7 +262,12 @@ class TagPattern:
     @classmethod
     def from_dict(cls, tag: dict[str | re.Pattern, str | re.Pattern]) -> TagPattern:
         key, value = next(iter(tag.items()))
-        return cls(key=re.compile(key), value=re.compile(value))
+        return cls(key, value)
+
+    @classmethod
+    def from_iterable(cls, tag: Iterable[str | re.Pattern]) -> TagPattern:
+        key, value, *_ = tag
+        return cls(key=key, value=value)
 
     @classmethod
     def from_tag_like(
@@ -268,13 +280,11 @@ class TagPattern:
         match tag_like:
             case Tag(str() | re.Pattern() as key, str() | re.Pattern() as value):
                 return cls(key, value)
-            case TagPattern(
-                str() | re.Pattern() as key, str() | re.Pattern() as value
-            ) as tag_pattern:
+            case TagPattern() as tag_pattern:
                 return tag_pattern
             case tuple() as tag_tuple:
                 if _is_tag_pattern_tuple(tag_tuple):
-                    return cls(*tag_tuple)
+                    return cls.from_iterable(tag_tuple)
                 raise TypeError(f"Incompatible tuple for tag_like: '{tag_tuple!r}'")
             case dict() as tag_dict:
                 if _is_tag_pattern_dict(tag_dict):
@@ -330,4 +340,9 @@ class TagPattern:
         )
 
 
-TagPattern("key", "value")
+TagLike = (
+    Tag
+    | TagPattern
+    | tuple[str | re.Pattern, str | re.Pattern]
+    | dict[str | re.Pattern, str | re.Pattern]
+)

@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 from collections import deque
 from collections.abc import Sequence
-from dataclasses import asdict
 from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from rich.console import Group
 from rich.json import JSON
@@ -31,6 +30,7 @@ class TagColor(StrEnum):
     CYAN = "cyan"
     BLUE3 = "blue3"
     TURQUOISE4 = "turquoise4"
+    BRIGHT_RED = "bright_red"
 
 
 """
@@ -77,7 +77,7 @@ class ConversationRenderer(JupyterMixin):
 
         for message, fold in zip(self.messages, self.fold_states, strict=True):
             timestamp = message.timestamp
-            role = message.to_base_message().role
+            role = message.role
 
             content = (
                 JSON(
@@ -146,6 +146,14 @@ class ConversationRenderer(JupyterMixin):
         else:
             return role_formatted, content_formatted
 
+    def _repr_mimebundle_(
+        self,
+        include: Sequence[str],
+        exclude: Sequence[str],
+        **kwargs: Any,
+    ) -> dict[str, str]:
+        return super()._repr_mimebundle_(include, exclude, **kwargs)  # type: ignore
+
 
 class MessageRenderer(JupyterMixin):
     def __init__(self, message: messages.Message):
@@ -153,6 +161,14 @@ class MessageRenderer(JupyterMixin):
 
     def __rich__(self) -> Table:
         return ConversationRenderer([self.message], [FoldState.UNFOLDED]).__rich__()
+
+    def _repr_mimebundle_(
+        self,
+        include: Sequence[str],
+        exclude: Sequence[str],
+        **kwargs: Any,
+    ) -> dict[str, str]:
+        return super()._repr_mimebundle_(include, exclude, **kwargs)  # type: ignore
 
 
 class MessageBufferRender(JupyterMixin):
@@ -188,10 +204,26 @@ class MessageBufferRender(JupyterMixin):
         else:
             return Group(Panel(messages, title="Messages", width=self.panel_width))
 
+    def _repr_mimebundle_(
+        self,
+        include: Sequence[str],
+        exclude: Sequence[str],
+        **kwargs: Any,
+    ) -> dict[str, str]:
+        return super()._repr_mimebundle_(include, exclude, **kwargs)  # type: ignore
+
 
 class TagRenderer(JupyterMixin):
     colors: ClassVar[deque[TagColor]] = deque(TagColor)
     key_registry: ClassVar[dict[str, TagColor]] = {}
+
+    def _repr_mimebundle_(
+        self,
+        include: Sequence[str],
+        exclude: Sequence[str],
+        **kwargs: Any,
+    ) -> dict[str, str]:
+        return super()._repr_mimebundle_(include, exclude, **kwargs)  # type: ignore
 
     @classmethod
     def get_color(cls, key: str) -> TagColor:
