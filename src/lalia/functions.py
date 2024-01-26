@@ -68,6 +68,10 @@ class FunctionCallResult(Generic[T]):
     error: Error | None = None
     finish_reason: FinishReason = FinishReason.FUNCTION_CALL
 
+    def __post_init__(self):
+        if self.error is not None and self.finish_reason is FinishReason.FUNCTION_CALL:
+            self.finish_reason = FinishReason.FUNCTION_CALL_ERROR
+
     def to_string(self) -> str:
         match self.error, self.value:
             case None, result:

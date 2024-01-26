@@ -52,7 +52,7 @@ def _estimate_tokens_in_message(
             message_tokens.append(get_tokens(name, model_name=model_name))
             # TODO: centralize argument dumping
             message_tokens.append(
-                get_tokens(json.dumps(arguments), model_name=model_name)
+                get_tokens(json.dumps(arguments, default=str), model_name=model_name)
             )
             message_tokens.append(Overhead.FUNCTION_CALL)
         case FunctionMessage():

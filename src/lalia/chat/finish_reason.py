@@ -8,4 +8,6 @@ class FinishReason(StrEnum):
     CONTENT_FILTER = "content_filter"
     DELEGATE = "delegate"
     NULL = "null"
-    ERROR = "error"
+    FUNCTION_CALL_FAILURE = "function_call_failure"
+    FUNCTION_CALL_ERROR = "function_call_error"
+    FAILURE = "failure"

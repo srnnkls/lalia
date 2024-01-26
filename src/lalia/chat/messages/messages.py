@@ -93,7 +93,7 @@ class FunctionMessage:
 @dataclass
 class FunctionCall:
     name: str
-    arguments: dict[str, Any] | None
+    arguments: dict[str, Any] | None = None
     function: Function[..., Any] | None = None
     context: TagPatterns = field(default_factory=set)
     parsing_error_messages: list[FunctionMessage] = field(default_factory=list)
