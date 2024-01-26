@@ -13,6 +13,7 @@ from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage
 from lalia.chat.messages.messages import FunctionCall
 from lalia.chat.messages.tags import TagPattern
+from lalia.chat.roles import Role
 from lalia.functions import FunctionSchema, get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.models.openai import ChatCompletionRequestMessage
@@ -25,7 +26,7 @@ from lalia.llm.models import ChatModel, FunctionCallDirective
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
-COMPLETION_BUFFER = 350
+COMPLETION_BUFFER = 450
 
 logger = get_logger(__name__)
 
@@ -42,14 +43,15 @@ def _to_openai_raw_message(message: Message | dict[str, Any]) -> dict[str, Any]:
     }
     match raw_message:
         case {
-            "role": "assistant",
-            "function_call": {"name": name, "arguments": arguments},
+            "role": Role.ASSISTANT,
+            "function_call": {"name": name} as f_call,
         }:
             # TODO: Centralize argument dumping
             raw_message["function_call"] = {
                 "name": name,
-                "arguments": json.dumps(arguments),
+                "arguments": json.dumps(f_call.get("arguments"), indent=2, default=str),
             }
+
     return raw_message
 
 

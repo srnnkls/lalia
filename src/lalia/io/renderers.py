@@ -86,7 +86,8 @@ class ConversationRenderer(JupyterMixin):
                             "name": message.function_call.name,
                             "arguments": message.function_call.arguments,
                         }
-                    )
+                    ),
+                    default=str,
                 )
                 if isinstance(message, messages.AssistantMessage)
                 and message.function_call

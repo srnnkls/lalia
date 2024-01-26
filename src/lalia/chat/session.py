@@ -138,7 +138,7 @@ class Session:
                 match completion_message, finish_reason:
                     case completion_message, FinishReason.STOP:
                         return completion_message
-                    case failure_message, FinishReason.ERROR:
+                    case failure_message, FinishReason.FAILURE:
                         return self._complete_failure(failure_message).message
             return self._complete_failure().message
         except (Exception, KeyboardInterrupt) as e:
@@ -196,12 +196,12 @@ class Session:
         with self.messages.expand({TagPattern("error", ".*")}) as messages:
             choice, *_ = self.llm.complete(messages).choices
 
-        assistant_message, finish_reson = self._handle_choice(choice)
+        assistant_message, finish_reason = self._handle_choice(choice)
 
         if self.autocommit:
             self.messages.commit()
 
-        return Completion(assistant_message, finish_reson)
+        return Completion(assistant_message, finish_reason)
 
     def _complete_function_call_error(
         self,
@@ -266,7 +266,10 @@ class Session:
                         name, function, arguments
                     )
 
-                    if finish_reason is FinishReason.ERROR:
+                    if finish_reason is FinishReason.FUNCTION_CALL_FAILURE:
+                        return function_message, finish_reason
+
+                    if finish_reason is FinishReason.FUNCTION_CALL_ERROR:
                         function_call_message.tags.add(Tag("error", "function_call"))
                         function_call_message = self._complete_function_call_error(
                             error_message=function_message,
@@ -310,8 +313,7 @@ class Session:
                 )
                 if finish_reason is FinishReason.DELEGATE:
                     finish_reason = choice.finish_reason
-                if finish_reason is not FinishReason.ERROR:
-                    self.messages.add(function_message)
+                self.messages.add(function_message)
                 return function_message, finish_reason
             case AssistantMessage(_, None) as assistant_message:
                 self.messages.add(assistant_message)
@@ -359,10 +361,22 @@ class Session:
                     ),
                     finish_reason,
                 )
-            case FunctionCallResult(value=None, error=Error() as error):
-                return self._handle_function_call_failure(
-                    failure_content=(f"Error: {error.message}"),
-                    name=name,
+            case FunctionCallResult(
+                value=None,
+                error=Error() as error,
+                finish_reason=finish_reason,
+            ):
+                return (
+                    FunctionMessage(
+                        name=name,
+                        content=f"Error: {error.message}",
+                        result=None,
+                        tags={
+                            Tag("function", name),
+                            Tag("error", "function_call"),
+                        },
+                    ),
+                    finish_reason,
                 )
 
             case _:
@@ -381,7 +395,7 @@ class Session:
                     Tag("error", "function_call"),
                 },
             ),
-            FinishReason.ERROR,
+            FinishReason.FAILURE,
         )
 
     def _repr_mimebundle_(

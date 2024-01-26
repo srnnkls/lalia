@@ -244,5 +244,5 @@ def is_type_prop(payload: Any) -> TypeGuard[TypeProp]:
     return isinstance(payload, TYPE_PROP_UNION)
 
 
-def is_composite_prop(payload: Any) -> TypeGuard[CompositeProp]:  # type: ignore
+def is_composite_prop(payload: Any) -> TypeGuard[CompositeProp]:
     return isinstance(payload, COMPOSITE_PROP_UNION)
