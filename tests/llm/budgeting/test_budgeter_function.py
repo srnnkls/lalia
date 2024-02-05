@@ -48,9 +48,7 @@ class TestBudgeterFunction:
         )
 
         assert len(truncated_message_buffer) == 1
-        assert all(
-            msg.to_base_message().role == "system" for msg in truncated_message_buffer
-        )
+        assert all(msg.role == "system" for msg in truncated_message_buffer)
         assert estimate_tokens(truncated_message_buffer) <= 30 - 5
 
     def test_truncation_without_filter(self, message_buffer):

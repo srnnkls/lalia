@@ -4,7 +4,7 @@ import pytest
 
 from lalia.formatting import (
     format_description,
-    format_function_as_typescript,
+    format_functions_as_typescript_namespace,
     format_parameter,
     format_parameter_type,
 )
@@ -53,16 +53,23 @@ def null_prop():
 def foo_expected():
     return cleandoc(
         """
+// Tools
+
+// Functions
+
 namespace functions {
-// This is a test function. It combines number a, appends string b and option c.
-  type foo = (_: {
-    // This is a integer number.
-    a: number;
-    // This will be appended.
-    b?: string | number;
-    // This is an Enum.
-    c?: "option1" | "option2";
-  }) => any;
+
+// This is a test function.
+// It combines number a, appends string b and option c.
+type foo = (_: {
+// This is a integer number.
+a: number,
+// This will be appended.
+b?: string | number, // default: test
+// This is an Enum.
+c?: "option1" | "option2", // default: option1
+}) => any;
+
 } // namespace functions
 """
     )
@@ -121,17 +128,18 @@ def function_schema(foo_function):
 
 class TestDesciptionFormatting:
     def test_description_formatting(self):
-        assert format_description("Test description") == "\n// Test description"
+        assert format_description("Test description") == "// Test description"
         # multiline descriptions should be converted to single line
         assert (
-            format_description("Multiline\ndescription") == "\n// Multiline description"
+            format_description("Multiline\ndescription")
+            == "// Multiline\n// description"
         )
         assert format_description(
             "Multiline\ndescription with some\nmore lines\n"
             "than usual.\n\nAlso a paragraph."
         ) == (
-            "\n// Multiline description with some more lines "
-            "than usual. Also a paragraph."
+            "// Multiline\n// description with some\n// more lines\n"
+            "// than usual.\n// \n// Also a paragraph."
         )
 
 
@@ -180,35 +188,35 @@ class TestParameterTypeFormatting:
 
 class TestParameterFormatting:
     def test_parameters(self, string_prop, number_prop, bool_prop, null_prop):
-        assert format_parameter("name", string_prop) == "\n// A string.\nname: string;"
-        assert format_parameter("name", number_prop) == "\n// A number.\nname: number;"
-        assert format_parameter("name", bool_prop) == "\n// A boolean.\nname: boolean;"
-        assert format_parameter("name", null_prop) == "\n// A null.\nname: null;"
+        assert format_parameter("name", string_prop) == "// A string.\nname: string,"
+        assert format_parameter("name", number_prop) == "// A number.\nname: number,"
+        assert format_parameter("name", bool_prop) == "// A boolean.\nname: boolean,"
+        assert format_parameter("name", null_prop) == "// A null.\nname: null,"
 
     def test_array_parameters(self, string_prop, number_prop, bool_prop, null_prop):
         assert (
             format_parameter(
                 "numbers", ArrayProp(description="Array of numbers.", items=number_prop)
             )
-            == "\n// Array of numbers.\nnumbers: number[];"
+            == "// Array of numbers.\nnumbers: number[],"
         )
         assert (
             format_parameter(
                 "strings", ArrayProp(description="Array of strings.", items=string_prop)
             )
-            == "\n// Array of strings.\nstrings: string[];"
+            == "// Array of strings.\nstrings: string[],"
         )
         assert (
             format_parameter(
                 "bools", ArrayProp(description="Array of bools.", items=bool_prop)
             )
-            == "\n// Array of bools.\nbools: boolean[];"
+            == "// Array of bools.\nbools: boolean[],"
         )
         assert (
             format_parameter(
                 "nulls", ArrayProp(description="Array of nulls.", items=null_prop)
             )
-            == "\n// Array of nulls.\nnulls: null[];"
+            == "// Array of nulls.\nnulls: null[],"
         )
 
     def test_default_formatting(self):
@@ -217,41 +225,43 @@ class TestParameterFormatting:
                 "sigma",
                 NumberProp(description="A number with default.", default=42),
             )
-            == "\n// A number with default.\nsigma?: number;"
+            == "// A number with default.\nsigma?: number, // default: 42.0"
         )
         assert (
             format_parameter(
                 "name",
                 StringProp(description="A string with default.", default="unknown"),
             )
-            == "\n// A string with default.\nname?: string;"
+            == "// A string with default.\nname?: string, // default: unknown"
         )
         assert (
             format_parameter(
                 "do_stuff",
                 BooleanProp(description="A boolean with default.", default=True),
             )
-            == "\n// A boolean with default.\ndo_stuff?: boolean;"
+            == "// A boolean with default.\ndo_stuff?: boolean, // default: true"
         )
         assert (
             format_parameter(
                 "sigma",
                 NumberProp(description="A number without default."),
             )
-            == "\n// A number without default.\nsigma: number;"
+            == "// A number without default.\nsigma: number,"
         )
         assert (
             format_parameter(
                 "name",
                 StringProp(description="A string without default."),
             )
-            == "\n// A string without default.\nname: string;"
+            == "// A string without default.\nname: string,"
         )
 
 
 class TestFunctionFormatting:
     def test_function_formatting(self, foo_function, foo_expected):
-        foo_formatted = format_function_as_typescript(get_schema(foo_function))
+        foo_formatted = format_functions_as_typescript_namespace(
+            [get_schema(foo_function)]
+        )
         assert foo_formatted == foo_expected
 
 

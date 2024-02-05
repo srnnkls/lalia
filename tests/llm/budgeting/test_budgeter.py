@@ -42,5 +42,5 @@ class TestBudgeterClass:
         )
 
         assert len(truncated_messages) == 1
-        assert all(msg.to_base_message().role == "system" for msg in truncated_messages)
+        assert all(msg.role == "system" for msg in truncated_messages)
         assert estimate_tokens(truncated_messages) <= 40 - 5

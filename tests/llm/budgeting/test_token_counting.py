@@ -72,7 +72,7 @@ class TestUtilityFunctions:
 
 class TestFunctionTokenCounting:
     def test_function_tokens(self, foo_function):
-        assert estimate_tokens_in_functions([foo_function]) == 93
+        assert estimate_tokens_in_functions([foo_function]) == 95
 
     @pytest.mark.openai
     @pytest.mark.exact_tokens
@@ -124,7 +124,7 @@ class TestFunctionTokenCounting:
 class TestMessageTokenCounting:
     def test_message_buffers(self, message_buffer, message_buffer_with_function_call):
         assert estimate_tokens_in_messages(message_buffer) == 21
-        assert estimate_tokens_in_messages(message_buffer_with_function_call) == 43
+        assert estimate_tokens_in_messages(message_buffer_with_function_call) == 37
 
     @pytest.mark.openai
     @pytest.mark.exact_tokens
@@ -168,6 +168,6 @@ class TestTokenCounting:
     def test_token_counting(
         self, message_buffer, message_buffer_with_function_call, foo_function
     ):
-        assert estimate_tokens(message_buffer, [foo_function]) == 110
-        assert estimate_tokens(message_buffer_with_function_call) == 43
+        assert estimate_tokens(message_buffer, [foo_function]) == 116
+        assert estimate_tokens(message_buffer_with_function_call) == 37
         assert estimate_tokens(message_buffer_with_function_call, [foo_function]) == 132
