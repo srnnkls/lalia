@@ -259,7 +259,9 @@ class TagRenderer(JupyterMixin):
 
         return Text.from_markup(
             f"[b] {self.tag.key}:[/b] {self.tag.value} ",
-            style=TAG_STYLES[color]
-            if self.fold_state is FoldState.UNFOLDED
-            else FOLDED_TAG_STYLES[color],
+            style=(
+                TAG_STYLES[color]
+                if self.fold_state is FoldState.UNFOLDED
+                else FOLDED_TAG_STYLES[color]
+            ),
         )

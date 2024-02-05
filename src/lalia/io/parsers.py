@@ -68,16 +68,14 @@ class Parser(Protocol):
         payload: str,
         adapter: TypeAdapter,
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
-        ...
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]: ...
 
     def parse_function_call_args(
         self,
         payload: str,
         function: Callable[..., Any],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
-        ...
+    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]: ...
 
 
 class LLMParser:

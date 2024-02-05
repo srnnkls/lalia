@@ -24,15 +24,17 @@ DEFAULT_FOLD_TAGS = {TagPattern("error", ".*")}
 
 
 def derive_tag_predicate(
-    tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool],
+    tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ),
 ) -> Callable[[set[Tag]], bool]:
     if not callable(tags):
         tags = convert_tag_like(tags)
@@ -82,11 +84,13 @@ class Folds:
     @classmethod
     def _parse_default_fold_tags(
         cls,
-        tags: set[Tag]
-        | set[TagPattern]
-        | Callable[[set[Tag]], bool]
-        | list[dict[str, Any]]  # serialized tags
-        | dict[str, Any],  # serialized callable
+        tags: (
+            set[Tag]
+            | set[TagPattern]
+            | Callable[[set[Tag]], bool]
+            | list[dict[str, Any]]  # serialized tags
+            | dict[str, Any]
+        ),  # serialized callable
     ) -> set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]:
         match tags:
             case set() as tags:
@@ -112,15 +116,19 @@ class Folds:
     ):
         return cls(
             [
-                FoldState.FOLDED
-                if derive_tag_predicate(default_fold_tags)(message.tags)
-                else FoldState.UNFOLDED
+                (
+                    FoldState.FOLDED
+                    if derive_tag_predicate(default_fold_tags)(message.tags)
+                    else FoldState.UNFOLDED
+                )
                 for message in messages
             ],
             [
-                FoldState.FOLDED
-                if derive_tag_predicate(default_fold_tags)(message.tags)
-                else FoldState.UNFOLDED
+                (
+                    FoldState.FOLDED
+                    if derive_tag_predicate(default_fold_tags)(message.tags)
+                    else FoldState.UNFOLDED
+                )
                 for message in pending
             ],
             default_fold_tags,
@@ -166,15 +174,17 @@ class Folds:
     @contextmanager
     def expand(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool],
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ),
         messages: Sequence[Message],
         pending: Sequence[Message],
     ):
@@ -191,16 +201,18 @@ class Folds:
 
     def fold(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool]
-        | None,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+            | None
+        ),
         messages: Sequence[Message],
         pending: Sequence[Message],
     ):
@@ -226,16 +238,18 @@ class Folds:
 
     def unfold(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool]
-        | None,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+            | None
+        ),
         messages: Sequence[Message],
         pending: Sequence[Message],
     ):

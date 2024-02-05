@@ -83,48 +83,52 @@ class Budgeter:
         self,
         messages: Sequence[dict[str, Any]],
         functions: Sequence[dict[str, Any]] = (),
-        exclude_tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool] = lambda _: True,
-    ) -> list[dict[str, Any]]:
-        ...
+        exclude_tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ) = lambda _: True,
+    ) -> list[dict[str, Any]]: ...
 
     @overload
     def truncate(
         self,
         messages: MessageBuffer | Sequence[Message],
         functions: Sequence[Callable[..., Any]] = (),
-        exclude_tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool] = lambda _: True,
-    ) -> list[Message]:
-        ...
+        exclude_tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ) = lambda _: True,
+    ) -> list[Message]: ...
 
     def truncate(
         self,
         messages: MessageBuffer | Sequence[Message] | Sequence[dict[str, Any]],
         functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
-        exclude_tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool] = lambda _: True,
+        exclude_tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ) = lambda _: True,
     ) -> list[Message] | list[dict[str, Any]]:
         return truncate_messages_or_buffer(
             messages=messages,
