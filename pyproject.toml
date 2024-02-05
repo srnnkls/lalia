@@ -31,14 +31,14 @@ include = [
 
 [tool.hatch.envs.default]
 dependencies = [
-  "black",
+  "black>=24.1",
   "hypothesis",
   "hypothesis-jsonschema",
   "ipykernel",
   "ipython",
   "pip-tools",
   "pytest",
-  "ruff",
+  "ruff>=0.2.0",
   "ruff-lsp"
 ]
 python = "3.11"
@@ -57,6 +57,8 @@ line-length = 88
 target-version = "py311"
 line-length = 88
 exclude = ["src/lalia/io/models"]
+
+[tool.ruff.lint]
 select = [
   "A",
   "ARG",
@@ -101,19 +103,20 @@ unfixable = [
   "F401",
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["lalia"]
 
 [tool.isort]
 profile = "black"
 
-[tool.ruff.flake8-tidy-imports]
+[tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
-[tool.ruff.pep8-naming]
+[tool.ruff.lint.pep8-naming]
 classmethod-decorators = ['lalia.utils.decorators.classproperty']
 
 [tool.ruff.per-file-ignores]
+
 # Tests can use magic values, assertions, and relative imports
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
 

@@ -41,24 +41,28 @@ def _is_tag_pattern_dict(
 
 
 def _convert_tag_like_set(
-    tags: set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | set[Tag]
-    | set[TagPattern],
+    tags: (
+        set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | set[Tag]
+        | set[TagPattern]
+    ),
 ) -> set[TagPattern]:
     return {TagPattern.from_tag_like(tag) for tag in tags}
 
 
 def convert_tag_like(
-    tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool],
+    tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ),
 ) -> set[TagPattern]:
     match tags:
         case Tag() | TagPattern():
@@ -109,11 +113,9 @@ class PredicateRegistry:
 
                 return cls._predicates[tag]
 
-            case (
-                TagPattern(
-                    key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
-                ) as tag_pattern
-            ):
+            case TagPattern(
+                key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
+            ) as tag_pattern:
 
                 def matches_any_tag(tags: set[Tag]) -> bool:
                     return any(
@@ -145,8 +147,7 @@ class _PredicateOperator(ABC):
         return hash(tuple(id(p) for p in self.predicates))
 
     @abstractmethod
-    def __call__(self, tags: set[Tag]) -> bool:
-        ...
+    def __call__(self, tags: set[Tag]) -> bool: ...
 
     def __and__(self, other: _PredicateOperator | Tag | TagPattern) -> _And:
         match other:
@@ -274,10 +275,12 @@ class TagPattern:
     @classmethod
     def from_tag_like(
         cls,
-        tag_like: Tag
-        | TagPattern
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern],
+        tag_like: (
+            Tag
+            | TagPattern
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+        ),
     ) -> TagPattern:
         match tag_like:
             case Tag(str() | re.Pattern() as key, str() | re.Pattern() as value):

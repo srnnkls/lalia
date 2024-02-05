@@ -93,15 +93,17 @@ class MessageBuffer(Sequence[Message]):
     @contextmanager
     def expand(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool],
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ),
     ):
         with self.folds.expand(tags, self.messages, self.pending):
             yield self
@@ -109,15 +111,17 @@ class MessageBuffer(Sequence[Message]):
     def filter(
         self,
         predicate: Callable[[Message], bool] = lambda _: True,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool] = lambda _: True,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ) = lambda _: True,
     ):
         tag_predicate = derive_tag_predicate(tags)
 
@@ -134,16 +138,18 @@ class MessageBuffer(Sequence[Message]):
 
     def fold(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool]
-        | None = None,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+            | None
+        ) = None,
     ):
         self.folds.fold(tags, self.messages, self.pending)
 
@@ -159,15 +165,17 @@ class MessageBuffer(Sequence[Message]):
 
     def unfold(
         self,
-        tags: Tag
-        | TagPattern
-        | set[Tag]
-        | set[TagPattern]
-        | tuple[str | re.Pattern, str | re.Pattern]
-        | dict[str | re.Pattern, str | re.Pattern]
-        | set[tuple[str | re.Pattern, str | re.Pattern]]
-        | set[dict[str | re.Pattern, str | re.Pattern]]
-        | Callable[[set[Tag]], bool]
-        | None = None,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+            | None
+        ) = None,
     ):
         self.folds.unfold(tags, self.messages, self.pending)

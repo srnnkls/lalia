@@ -75,9 +75,11 @@ def _to_open_ai_raw_function_schema(
 
 
 def _to_open_ai_raw_function_schemas(
-    funcs: Sequence[Callable[..., Any]]
-    | Sequence[FunctionSchema]
-    | Sequence[dict[str, Any]],
+    funcs: (
+        Sequence[Callable[..., Any]]
+        | Sequence[FunctionSchema]
+        | Sequence[dict[str, Any]]
+    ),
 ) -> list[dict[str, Any]]:
     return [_to_open_ai_raw_function_schema(func) for func in funcs]
 
@@ -236,8 +238,9 @@ class OpenAIChat:
         context: set[TagPattern] | None = None,
         model: ChatModel | None = None,
         functions: Sequence[Callable[..., Any]] = (),
-        function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.AUTO,
+        function_call: (
+            FunctionCallDirective | dict[str, str]
+        ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
         n_choices: int = 1,
@@ -291,8 +294,9 @@ class OpenAIChat:
         messages: Sequence[Message | dict[str, Any]],
         model: ChatModel | None = None,
         functions: Sequence[dict[str, Any]] = (),
-        function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.AUTO,
+        function_call: (
+            FunctionCallDirective | dict[str, str]
+        ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
         n_choices: int = 1,

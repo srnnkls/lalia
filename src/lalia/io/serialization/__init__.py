@@ -8,8 +8,7 @@ from pydantic import BaseModel
 @runtime_checkable
 class Dataclass(Protocol):
     @property
-    def __dataclass_fields__(self) -> Mapping[str, Field]:
-        ...
+    def __dataclass_fields__(self) -> Mapping[str, Field]: ...
 
 
 # TODO: Complete? Maybe add missing types

@@ -25,8 +25,9 @@ class LLMCallback(Protocol):
         context: set[TagPattern],
         model: ChatModel,
         functions: Sequence[Callable[..., Any]] = (),
-        function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.AUTO,
+        function_call: (
+            FunctionCallDirective | dict[str, str]
+        ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
         n_choices: int = 1,
@@ -41,8 +42,7 @@ class LLMCallback(Protocol):
         top_p: float | None = None,
         user: str | None = None,
         timeout: int | None = None,
-    ) -> ChatCompletionResponse:
-        ...
+    ) -> ChatCompletionResponse: ...
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -59,11 +59,9 @@ class DispatchCall:
 
 @runtime_checkable
 class Dispatcher(Protocol):
-    def dispatch(self, session: Session) -> DispatchCall:
-        ...
+    def dispatch(self, session: Session) -> DispatchCall: ...
 
-    def reset(self):
-        ...
+    def reset(self): ...
 
 
 @dataclass

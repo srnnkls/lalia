@@ -161,17 +161,18 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[dict[str, Any]] = (),
-    exclude_tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool] = lambda _: False,
-) -> list[dict[str, Any]]:
-    ...
+    exclude_tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ) = lambda _: False,
+) -> list[dict[str, Any]]: ...
 
 
 @overload
@@ -180,17 +181,18 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any]] = (),
-    exclude_tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool] = lambda _: False,
-) -> list[Message]:
-    ...
+    exclude_tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ) = lambda _: False,
+) -> list[Message]: ...
 
 
 def truncate_messages(
@@ -198,15 +200,17 @@ def truncate_messages(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any]] | Sequence[dict[str, Any]] = (),
-    exclude_tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool] = lambda _: False,
+    exclude_tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ) = lambda _: False,
 ) -> list[Message] | list[dict[str, Any]]:
     return truncate_messages_or_buffer(
         messages=messages,
@@ -231,15 +235,17 @@ def truncate_messages_or_buffer(
     token_threshold: int,
     completion_buffer: int,
     functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
-    exclude_tags: Tag
-    | TagPattern
-    | set[Tag]
-    | set[TagPattern]
-    | tuple[str | re.Pattern, str | re.Pattern]
-    | dict[str | re.Pattern, str | re.Pattern]
-    | set[tuple[str | re.Pattern, str | re.Pattern]]
-    | set[dict[str | re.Pattern, str | re.Pattern]]
-    | Callable[[set[Tag]], bool] = lambda _: False,
+    exclude_tags: (
+        Tag
+        | TagPattern
+        | set[Tag]
+        | set[TagPattern]
+        | tuple[str | re.Pattern, str | re.Pattern]
+        | dict[str | re.Pattern, str | re.Pattern]
+        | set[tuple[str | re.Pattern, str | re.Pattern]]
+        | set[dict[str | re.Pattern, str | re.Pattern]]
+        | Callable[[set[Tag]], bool]
+    ) = lambda _: False,
 ) -> list[Message] | list[dict[str, Any]]:
     exclude_predicate = derive_tag_predicate(exclude_tags)  # type: ignore
     max_tokens_usable = token_threshold - completion_buffer

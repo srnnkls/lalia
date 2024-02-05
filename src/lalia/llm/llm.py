@@ -16,8 +16,9 @@ class LLM(Protocol):
         context: set[TagPattern] | None = None,
         model: ChatModel | None = None,
         functions: Sequence[Callable[..., Any]] = (),
-        function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.AUTO,
+        function_call: (
+            FunctionCallDirective | dict[str, str]
+        ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
         n_choices: int = 1,
@@ -32,16 +33,16 @@ class LLM(Protocol):
         top_p: float | None = None,
         user: str | None = None,
         timeout: int | None = None,
-    ) -> ChatCompletionResponse:
-        ...
+    ) -> ChatCompletionResponse: ...
 
     def complete_raw(
         self,
         messages: Sequence[Message | dict[str, Any]],
         model: ChatModel | None = None,
         functions: Sequence[dict[str, Any]] = (),
-        function_call: FunctionCallDirective
-        | dict[str, str] = FunctionCallDirective.AUTO,
+        function_call: (
+            FunctionCallDirective | dict[str, str]
+        ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
         n_choices: int = 1,
@@ -56,5 +57,4 @@ class LLM(Protocol):
         top_p: float | None = None,
         user: str | None = None,
         timeout: int | None = None,
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
