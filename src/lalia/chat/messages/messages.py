@@ -33,7 +33,7 @@ def _parse_tag(tag: dict[str, str] | tuple[str, str, str] | Tag) -> Tag:
 
 
 def _parse_tags(
-    tags: list[dict[str, str]] | set[tuple[str, str, str]] | set[Tag]
+    tags: list[dict[str, str]] | set[tuple[str, str, str]] | set[Tag],
 ) -> set[Tag]:
     return {_parse_tag(tag) for tag in tags}
 

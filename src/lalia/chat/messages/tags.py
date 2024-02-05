@@ -44,7 +44,7 @@ def _convert_tag_like_set(
     tags: set[tuple[str | re.Pattern, str | re.Pattern]]
     | set[dict[str | re.Pattern, str | re.Pattern]]
     | set[Tag]
-    | set[TagPattern]
+    | set[TagPattern],
 ) -> set[TagPattern]:
     return {TagPattern.from_tag_like(tag) for tag in tags}
 
@@ -109,9 +109,11 @@ class PredicateRegistry:
 
                 return cls._predicates[tag]
 
-            case TagPattern(
-                key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
-            ) as tag_pattern:
+            case (
+                TagPattern(
+                    key=re.Pattern() as key_pattern, value=re.Pattern() as value_pattern
+                ) as tag_pattern
+            ):
 
                 def matches_any_tag(tags: set[Tag]) -> bool:
                     return any(

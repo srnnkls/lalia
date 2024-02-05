@@ -56,13 +56,13 @@ def _to_openai_raw_message(message: Message | dict[str, Any]) -> dict[str, Any]:
 
 
 def _to_openai_raw_messages(
-    messages: Sequence[Message | dict[str, Any]]
+    messages: Sequence[Message | dict[str, Any]],
 ) -> list[dict[str, Any]]:
     return [_to_openai_raw_message(message) for message in messages]
 
 
 def _to_open_ai_raw_function_schema(
-    func: Callable[..., Any] | FunctionSchema | dict[str, Any]
+    func: Callable[..., Any] | FunctionSchema | dict[str, Any],
 ) -> dict[str, Any]:
     match func:
         case FunctionSchema() as func_schema:
@@ -77,7 +77,7 @@ def _to_open_ai_raw_function_schema(
 def _to_open_ai_raw_function_schemas(
     funcs: Sequence[Callable[..., Any]]
     | Sequence[FunctionSchema]
-    | Sequence[dict[str, Any]]
+    | Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     return [_to_open_ai_raw_function_schema(func) for func in funcs]
 

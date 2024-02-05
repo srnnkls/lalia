@@ -18,7 +18,7 @@ from lalia.chat.messages.messages import (
     UserMessage,
 )
 from lalia.chat.messages.tags import Tag, TagPattern
-from lalia.formatting import format_function_as_typescript
+from lalia.formatting import format_functions_as_typescript_namespace
 from lalia.functions import FunctionSchema, get_schema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
@@ -116,7 +116,7 @@ def estimate_tokens_in_functions(
     functions: Sequence[Callable[..., Any] | dict[str, Any]],
     model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
-    function_tokens = []
+    function_schemas = []
     for function in functions:
         match function:
             case Callable():
@@ -125,11 +125,10 @@ def estimate_tokens_in_functions(
                 function_schema = FunctionSchema(**function)
             case _:
                 raise ValueError("Input must be either a Callable or a dictionary")
+        function_schemas.append(function_schema)
 
-        typescript_defintion = format_function_as_typescript(function_schema)
-        function_tokens.append(get_tokens(typescript_defintion, model_name=model_name))
-    function_tokens.append(Overhead.FUNCTION_DEFINITION)
-    return sum(function_tokens)
+    typescript_namespace = format_functions_as_typescript_namespace(function_schemas)
+    return get_tokens(typescript_namespace, model_name=model_name)
 
 
 def estimate_tokens(
@@ -144,14 +143,6 @@ def estimate_tokens(
 
     if functions:
         tokens.append(estimate_tokens_in_functions(functions, model))
-
-    # if there's a system message _and_ functions are present, subtract four tokens
-    if functions:
-        for message in messages:
-            match message:
-                case SystemMessage() | {"role": "system"}:
-                    tokens.append(Overhead.SYSTEM_ROLE)
-                    break
 
     # only add specific function call tokens, if its 'auto' add nothing
     if function_call != FunctionCallDirective.AUTO:
