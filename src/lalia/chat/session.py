@@ -6,7 +6,7 @@ from dataclasses import field
 from typing import Any
 from uuid import uuid4
 
-from pydantic import UUID4, ConfigDict, Field, field_serializer, field_validator
+from pydantic import UUID4, ConfigDict, Field, field_serializer
 from pydantic.dataclasses import dataclass
 
 from lalia.chat import dispatchers
@@ -30,6 +30,11 @@ from lalia.functions import (
     get_name,
 )
 from lalia.io.logging import get_logger
+from lalia.io.progress import (
+    NopProgressHandler,
+    ProgressManager,
+    ProgressState,
+)
 from lalia.io.serialization.functions import (
     CallableRegistry,
     serialize_callable,
@@ -51,6 +56,14 @@ ARGUMENT_PARSING_FAILURE_MESSAGE_TEMPLATE = (
 )
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
+
+
+@dataclass
+class SessionProgress:
+    state: ProgressState
+    iteration: int | None = None
+    function: str | None = None
+    arguments: dict[str, Any] | None = None
 
 
 @dataclass(
@@ -77,6 +90,11 @@ class Session:
     )
     storage_backend: StorageBackend[UUID4] = Field(
         default=DictStorageBackend[UUID4](), exclude=True
+    )
+    progress_manager: ProgressManager = field(
+        default_factory=lambda: ProgressManager[ProgressState](
+            initial_state=ProgressState.IDLE, handler=NopProgressHandler()
+        )
     )
     autocommit: bool = True
     memory: int = 100
@@ -162,6 +180,14 @@ class Session:
             params["functions"] = self.functions
 
         with messages.expand(context) as messages:
+            if len(params["functions"]) == 1:
+                progress = SessionProgress(
+                    state=ProgressState.GENERATING,
+                    function=get_name(params["functions"][0]),
+                )
+            else:
+                progress = SessionProgress(state=ProgressState.GENERATING)
+            self.progress_manager.emit(progress)
             response = llm_complete(
                 messages=messages,
                 context=context,
@@ -235,7 +261,7 @@ class Session:
     def _handle_function_call_message(
         self, function_call_message: AssistantMessage
     ) -> tuple[FunctionMessage, FinishReason]:
-        for _ in range(self.max_function_call_attempts):
+        for i in range(1, self.max_function_call_attempts + 1):
             match function_call_message.function_call:
                 case FunctionCall(
                     name=name,
@@ -243,6 +269,14 @@ class Session:
                     arguments=arguments,
                     parsing_error_messages=parsing_error_messages,
                 ):
+                    progress = SessionProgress(
+                        state=ProgressState.EXECUTING,
+                        iteration=i,
+                        function=name,
+                        arguments=arguments,
+                    )
+                    self.progress_manager.emit(progress)
+
                     function_call_message.tags.add(Tag("function", name))
 
                     if parsing_error_messages:
