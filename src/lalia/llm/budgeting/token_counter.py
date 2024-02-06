@@ -18,7 +18,7 @@ from lalia.chat.messages.messages import (
     UserMessage,
 )
 from lalia.chat.messages.tags import Tag, TagPattern
-from lalia.formatting import format_functions_as_typescript_namespace
+from lalia.formatting import OpenAIFunctionFormatter
 from lalia.functions import FunctionSchema, get_schema
 from lalia.llm.models import ChatModel, FunctionCallDirective
 
@@ -127,8 +127,9 @@ def estimate_tokens_in_functions(
                 raise ValueError("Input must be either a Callable or a dictionary")
         function_schemas.append(function_schema)
 
-    typescript_namespace = format_functions_as_typescript_namespace(function_schemas)
-    return get_tokens(typescript_namespace, model_name=model_name)
+    formatter = OpenAIFunctionFormatter()
+    functions_formatted = formatter.format(function_schemas)
+    return get_tokens(functions_formatted, model_name=model_name)
 
 
 def estimate_tokens(
