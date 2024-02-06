@@ -14,7 +14,6 @@ dependencies = [
   "ruamel.yaml",
   "ruamel.yaml.string",
   "tiktoken",
-  "pytest-cov",
 ]
 dynamic = [
   "version"
@@ -38,6 +37,7 @@ dependencies = [
   "ipython",
   "pip-tools",
   "pytest",
+  "pytest-cov",
   "ruff>=0.2.0",
   "ruff-lsp"
 ]
