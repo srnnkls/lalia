@@ -36,7 +36,7 @@ class Overhead(IntEnum):
 
 
 def _estimate_tokens_in_message(
-    message: Message, model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    message: Message, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
 ) -> int:
     message_tokens = []
     match message:
@@ -44,24 +44,22 @@ def _estimate_tokens_in_message(
             message_tokens.append(Overhead.SYSTEM_ROLE)
         case FunctionMessage(name=name):
             message_tokens.append(
-                get_tokens(name, overhead=Overhead.MESSAGE_NAME, model_name=model_name)
+                get_tokens(name, overhead=Overhead.MESSAGE_NAME, model=model)
             )
         case AssistantMessage(
             function_call=FunctionCall(name=name, arguments=arguments)
         ):
-            message_tokens.append(get_tokens(name, model_name=model_name))
+            message_tokens.append(get_tokens(name, model=model))
             # TODO: centralize argument dumping
             message_tokens.append(
-                get_tokens(json.dumps(arguments, default=str), model_name=model_name)
+                get_tokens(json.dumps(arguments, default=str), model=model)
             )
             message_tokens.append(Overhead.FUNCTION_CALL)
         case FunctionMessage():
             message_tokens.append(Overhead.FUNCTION_ROLE)
 
     message_tokens.append(
-        get_tokens(
-            message.content, overhead=Overhead.MESSAGE_INSTANCE, model_name=model_name
-        )
+        get_tokens(message.content, overhead=Overhead.MESSAGE_INSTANCE, model=model)
     )
 
     return sum(message_tokens)
@@ -69,19 +67,19 @@ def _estimate_tokens_in_message(
 
 def _iterate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> Iterator[int]:
     adapter = TypeAdapter(Message)
 
     for message in messages:
         match message:
             case dict() as raw_message:
-                message_parsed = adapter.validate_python(raw_message)
-                yield _estimate_tokens_in_message(message_parsed, model_name)
+                parsed_message = adapter.validate_python(raw_message)
+                yield _estimate_tokens_in_message(parsed_message, model)
             case (
                 SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
             ):
-                yield _estimate_tokens_in_message(message, model_name)
+                yield _estimate_tokens_in_message(message, model)
             case _:
                 raise ValueError(
                     "Input must be either a MessageBuffer or a a sequence of "
@@ -90,9 +88,9 @@ def _iterate_tokens_in_messages(
 
 
 def count_tokens_in_string(
-    string: str, model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    string: str, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
 ):
-    encoding = tiktoken.encoding_for_model(model_name.value)
+    encoding = tiktoken.encoding_for_model(model.value)
     token_count = len(encoding.encode(string))
     return token_count
 
@@ -100,21 +98,21 @@ def count_tokens_in_string(
 def get_tokens(
     string: str | None,
     overhead: int = 0,
-    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ):
-    return (count_tokens_in_string(string, model_name) + overhead) if string else 0
+    return (count_tokens_in_string(string, model) + overhead) if string else 0
 
 
 def estimate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
-    return sum(_iterate_tokens_in_messages(messages, model_name)) + Overhead.COMPLETION
+    return sum(_iterate_tokens_in_messages(messages, model)) + Overhead.COMPLETION
 
 
 def estimate_tokens_in_functions(
     functions: Sequence[Callable[..., Any] | dict[str, Any]],
-    model_name: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
     function_schemas = []
     for function in functions:
@@ -129,7 +127,7 @@ def estimate_tokens_in_functions(
 
     formatter = OpenAIFunctionFormatter()
     functions_formatted = formatter.format(function_schemas)
-    return get_tokens(functions_formatted, model_name=model_name)
+    return get_tokens(functions_formatted, model=model)
 
 
 def estimate_tokens(
@@ -247,22 +245,63 @@ def truncate_messages_or_buffer(
         | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
     ) = lambda _: False,
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> list[Message] | list[dict[str, Any]]:
-    exclude_predicate = derive_tag_predicate(exclude_tags)  # type: ignore
-    max_tokens_usable = token_threshold - completion_buffer
-    current_tokens = estimate_tokens(messages, functions)
+    adapter = TypeAdapter(Message)
 
-    truncated_messages = list(messages)
-    for message in list(truncated_messages):
-        if current_tokens <= max_tokens_usable:
-            break
-        if not exclude_predicate(_get_message_tags(message)):
-            truncated_messages.remove(message)
-            current_tokens = estimate_tokens(truncated_messages, functions)
+    # inner function to calculate token count for a single message
+    def _get_token_count(message: Message | dict[str, Any]):
+        match message:
+            case dict() as raw_message:
+                parsed_message = adapter.validate_python(raw_message)
+                return _estimate_tokens_in_message(parsed_message, model)
+            case _:
+                return _estimate_tokens_in_message(message, model)
 
-    if current_tokens > max_tokens_usable:
+    # calculate maximum tokens allowed for messages
+    max_usable_tokens = token_threshold - completion_buffer
+
+    # prepare predicate for message exclusion
+    exclude_predicate = derive_tag_predicate(exclude_tags)
+
+    # step 1: track indices of messages to exclude or to retain
+    excluded_indices = set()
+    eligible_indices = []
+    for i, message in enumerate(messages):
+        if exclude_predicate(_get_message_tags(message)):
+            excluded_indices.add(i)
+        else:
+            eligible_indices.append(i)
+
+    # step 2: calculate base tokens used by excluded messages, functions and completion buffer
+    base_tokens = completion_buffer
+    if excluded_indices:
+        excluded_messages = [messages[i] for i in excluded_indices]
+        base_tokens += estimate_tokens_in_messages(excluded_messages)
+
+    if functions:
+        base_tokens += estimate_tokens_in_functions(functions)
+
+    # failsafe: if base tokens exceed the threshold, abort truncation
+    if base_tokens > max_usable_tokens:
         raise ValueError(
-            "All messages truncated. Remove functions or increase token threshold."
+            "Base tokens exceed the available tokens. Aborting truncation."
         )
 
-    return truncated_messages  # type: ignore
+    # step 3: truncate eligible messages based on token count
+    truncated_indices = []
+    tokens = base_tokens
+    for i in reversed(eligible_indices):
+        message_tokens = _get_token_count(messages[i])
+
+        # if the message still fits in the budget, add it to the truncated indices
+        if tokens + message_tokens <= max_usable_tokens:
+            truncated_indices.append(i)
+            tokens += message_tokens
+        else:
+            break  # Stop adding messages once the token limit is exceeded
+
+    # step 4: recunstruct message buffer
+    indices_to_keep = set(truncated_indices) | excluded_indices
+
+    return [message for i, message in enumerate(messages) if i in indices_to_keep]  # type: ignore

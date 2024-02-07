@@ -34,13 +34,13 @@ class TestBudgeterInstantiation:
 
 class TestBudgeterClass:
     def test_budgeter_truncation_with_filter(self, message_buffer):
-        budgeter = Budgeter(token_threshold=20, completion_buffer=5)
+        budgeter = Budgeter(token_threshold=50, completion_buffer=5)
 
         truncated_messages = budgeter.truncate(
             messages=message_buffer,
             exclude_tags=Tag(key="kind", value="initial"),
         )
 
-        assert len(truncated_messages) == 1
-        assert all(msg.role == "system" for msg in truncated_messages)
-        assert estimate_tokens(truncated_messages) <= 40 - 5
+        assert len(truncated_messages) == 2
+        assert all(msg.role != "user" for msg in truncated_messages)
+        assert estimate_tokens(truncated_messages) <= 50 - 5
