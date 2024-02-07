@@ -6,6 +6,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal, TypeGuard, get_args
 
 from pydantic import (
+    AliasChoices,
     Discriminator,
     Field,
     Tag,
@@ -65,9 +66,20 @@ class AnyProp:
 class StringProp:
     description: str | None = None
     default: str | None = None
-    max_length: int | None = Field(default=None, alias="maxLength", ge=0)
-    min_length: int | None = Field(default=None, alias="minLength", ge=0)
+    max_length: int | None = Field(
+        default=None,
+        serialization_alias="maxLength",
+        validation_alias=AliasChoices("max_length", "maxLength"),
+        ge=0,
+    )
+    min_length: int | None = Field(
+        default=None,
+        serialization_alias="minLength",
+        validation_alias=AliasChoices("min_length", "minLength"),
+        ge=0,
+    )
     pattern: str | re.Pattern | None = None
+    format: str | None = None
     title: str | None = None
     enum: list[str] | None = None
     type_: Literal[JsonSchemaType.STRING] = Field(
@@ -79,8 +91,23 @@ class StringProp:
 class IntegerProp:
     description: str | None = None
     default: int | None = None
-    maximum: int | None = Field(default=None, ge=0)
-    minimum: int | None = Field(default=None, ge=0)
+    maximum: int | None = None
+    minimum: int | None = None
+    exclusive_maximum: int | None = Field(
+        default=None,
+        serialization_alias="exclusiveMaximum",
+        validation_alias=AliasChoices("exclusive_maximum", "exclusiveMaximum"),
+    )
+    exclusive_minimum: int | None = Field(
+        default=None,
+        serialization_alias="exclusiveMinimum",
+        validation_alias=AliasChoices("exclusive_minimum", "exclusiveMinimum"),
+    )
+    multiple_of: int | None = Field(
+        default=None,
+        serialization_alias="multipleOf",
+        validation_alias=AliasChoices("multiple_of", "multipleOf"),
+    )
     title: str | None = None
     enum: list[int] | None = None
     type_: Literal[JsonSchemaType.INTEGER] = Field(
@@ -92,8 +119,23 @@ class IntegerProp:
 class NumberProp:
     description: str | None = None
     default: float | None = None
-    maximum: float | None = Field(default=None, ge=0)
-    minimum: float | None = Field(default=None, ge=0)
+    maximum: float | None = None
+    minimum: float | None = None
+    exclusive_maximum: float | None = Field(
+        default=None,
+        serialization_alias="exclusiveMaximum",
+        validation_alias=AliasChoices("exclusive_maximum", "exclusiveMaximum"),
+    )
+    exclusive_minimum: float | None = Field(
+        default=None,
+        serialization_alias="exclusiveMinimum",
+        validation_alias=AliasChoices("exclusive_minimum", "exclusiveMinimum"),
+    )
+    multiple_of: float | None = Field(
+        default=None,
+        serialization_alias="multipleOf",
+        validation_alias=AliasChoices("multiple_of", "multipleOf"),
+    )
     title: str | None = None
     enum: list[int] | None = None
     type_: Literal[JsonSchemaType.NUMBER] = Field(
@@ -117,6 +159,42 @@ class ArrayProp:
     default: Any | None = None
     items: Prop | None = None
     title: str | None = None
+    prefix_items: list[dict[str, Any]] | None = Field(
+        default=None,
+        serialization_alias="prefixItems",
+        validation_alias=AliasChoices("prefix_items", "prefixItems"),
+    )
+    unevaluated_items: bool | dict[str, Any] | None = Field(
+        default=None,
+        serialization_alias="unevaluatedItems",
+        validation_alias=AliasChoices("unevaluated_items", "unevaluatedItems"),
+    )
+    contains: Prop | None = None
+    min_contains: int | None = Field(
+        default=None,
+        serialization_alias="minContains",
+        validation_alias=AliasChoices("min_contains", "minContains"),
+    )
+    max_contains: int | None = Field(
+        default=None,
+        serialization_alias="maxContains",
+        validation_alias=AliasChoices("max_contains", "maxContains"),
+    )
+    min_items: int | None = Field(
+        default=None,
+        serialization_alias="minItems",
+        validation_alias=AliasChoices("min_items", "minItems"),
+    )
+    max_items: int | None = Field(
+        default=None,
+        serialization_alias="maxItems",
+        validation_alias=AliasChoices("max_items", "maxItems"),
+    )
+    unique_items: bool | None = Field(
+        default=None,
+        serialization_alias="uniqueItems",
+        validation_alias=AliasChoices("unique_items", "uniqueItems"),
+    )
     type_: Literal[JsonSchemaType.ARRAY] = Field(
         default=JsonSchemaType.ARRAY, alias=PropDiscriminator.TYPE.alias
     )
@@ -139,7 +217,36 @@ class ObjectProp:
     title: str | None = None
     properties: dict[str, Prop] | None = None
     additional_properties: bool | Prop | None = Field(
-        default=None, alias="additionalProperties"
+        default=None,
+        serialization_alias="additionalProperties",
+        validation_alias=AliasChoices("additional_properties", "additionalProperties"),
+    )
+    pattern_properties: dict[str | re.Pattern, Any] | None = Field(
+        default=None,
+        serialization_alias="patternProperties",
+        validation_alias=AliasChoices("pattern_properties", "patternProperties"),
+    )
+    unevaluated_properties: bool | None = Field(
+        default=None,
+        serialization_alias="unevaluatedProperties",
+        validation_alias=AliasChoices(
+            "unevaluated_properties", "unevaluatedProperties"
+        ),
+    )
+    property_names: dict[str, str] | None = Field(
+        default=None,
+        serialization_alias="propertyNames",
+        validation_alias=AliasChoices("property_names", "propertyNames"),
+    )
+    min_properties: int | None = Field(
+        default=None,
+        serialization_alias="minProperties",
+        validation_alias=AliasChoices("min_properties", "minProperties"),
+    )
+    max_properties: int | None = Field(
+        default=None,
+        serialization_alias="maxProperties",
+        validation_alias=AliasChoices("max_properties", "maxProperties"),
     )
     required: list[str] | None = None
     type_: Literal[JsonSchemaType.OBJECT] = Field(
@@ -149,7 +256,12 @@ class ObjectProp:
 
 @dataclass
 class OneOfProp:
-    one_of: list[Prop] = Field(alias=JsonSchemaComposite.ONE_OF)
+    one_of: list[Prop] = Field(
+        serialization_alias=JsonSchemaComposite.ONE_OF,
+        validation_alias=AliasChoices(
+            JsonSchemaComposite.ONE_OF, JsonSchemaComposite.ONE_OF.name.lower()
+        ),
+    )
     description: str | None = None
     default: Any | None = None
     title: str | None = None
@@ -157,7 +269,12 @@ class OneOfProp:
 
 @dataclass
 class AnyOfProp:
-    any_of: list[Prop] = Field(alias=JsonSchemaComposite.ANY_OF)
+    any_of: list[Prop] = Field(
+        serialization_alias=JsonSchemaComposite.ANY_OF,
+        validation_alias=AliasChoices(
+            JsonSchemaComposite.ANY_OF, JsonSchemaComposite.ANY_OF.name.lower()
+        ),
+    )
     description: str | None = None
     default: Any | None = None
     title: str | None = None
@@ -165,14 +282,24 @@ class AnyOfProp:
 
 @dataclass
 class AllOfProp:
-    all_of: list[Prop] = Field(alias=JsonSchemaComposite.ALL_OF)
+    all_of: list[Prop] = Field(
+        serialization_alias=JsonSchemaComposite.ALL_OF,
+        validation_alias=AliasChoices(
+            JsonSchemaComposite.ALL_OF, JsonSchemaComposite.ALL_OF.name.lower()
+        ),
+    )
     description: str | None = None
     default: Any | None = None
 
 
 @dataclass
 class NotProp:
-    not_: Prop = Field(alias="not")
+    not_: Prop = Field(
+        serialization_alias=JsonSchemaComposite.NOT_,
+        validation_alias=AliasChoices(
+            JsonSchemaComposite.NOT_, JsonSchemaComposite.NOT_.name.lower()
+        ),
+    )
     description: str | None = None
     default: Any | None = None
     title: str | None = None

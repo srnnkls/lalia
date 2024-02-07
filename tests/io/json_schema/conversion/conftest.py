@@ -147,12 +147,12 @@ def expected_custom_schema_object():
                         title="L",
                     ),
                     "d": ObjectProp(
-                        additionalProperties=StringProp(),
+                        additional_properties=StringProp(),
                         title="D",
                     ),
                     "dv": ObjectProp(
-                        additionalProperties=AnyOfProp(  # type: ignore
-                            anyOf=[  # type: ignore
+                        additional_properties=AnyOfProp(
+                            any_of=[
                                 StringProp(),
                                 IntegerProp(),
                             ]
@@ -163,8 +163,8 @@ def expected_custom_schema_object():
                 required=["l", "d", "dv"],
                 title="C",
             ),
-            "e": AllOfProp(  # type: ignore
-                allOf=[  # type: ignore
+            "e": AllOfProp(
+                all_of=[
                     IntegerProp(
                         title="E",
                         enum=[0, 1],
@@ -172,16 +172,16 @@ def expected_custom_schema_object():
                 ],
                 default=1,
             ),
-            "v": AnyOfProp(  # type: ignore
-                anyOf=[  # type: ignore
+            "v": AnyOfProp(
+                any_of=[
                     IntegerProp(),
                     StringProp(),
                     NullProp(),
                 ],
                 title="V",
             ),
-            "n": AnyOfProp(  # type: ignore
-                anyOf=[  # type: ignore
+            "n": AnyOfProp(
+                any_of=[
                     IntegerProp(),
                     NullProp(),
                 ],
