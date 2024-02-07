@@ -10,23 +10,24 @@ from rich.pretty import pretty_repr
 
 MESSAGE_TEMPLATE = "{timestamp:%Y-%m-%d %H:%M:%S} {msg}"
 
-StateType = TypeVar("StateType", bound=Enum)
+ProgressStateType = TypeVar("ProgressStateType", bound=Enum)
 
 
 class ProgressState(StrEnum):
     IDLE = "idle"  # Session is waiting for user input
     GENERATING = "generating"  # LLM is generating response
     EXECUTING = "executing"  # Session is executing a function
-    ABORTED = "aborted"  # aborted by user
-    SUSPENDED = "suspended"  # suspended by function
 
 
 @runtime_checkable
-class Progress(Protocol, Generic[StateType]):
-    state: StateType
+class Progress(Protocol, Generic[ProgressStateType]):
+    state: ProgressStateType
     iteration: int | None
-    function: str | None
+    functions: list[str] | None
     arguments: dict[str, Any] | None
+
+
+ProgressType_contra = TypeVar("ProgressType_contra", contravariant=True, bound=Progress)
 
 
 @runtime_checkable
@@ -35,16 +36,16 @@ class ProgressFormatter(Protocol):
 
 
 @runtime_checkable
-class ProgressHandler(Protocol):
-    def emit(self, progress: Progress): ...
+class ProgressHandler(Protocol, Generic[ProgressType_contra]):
+    def emit(self, progress: ProgressType_contra): ...
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
-class ProgressManager(Generic[StateType]):
+class ProgressManager(Generic[ProgressStateType]):
     handler: ProgressHandler
-    initial_state: InitVar[StateType]
+    initial_state: InitVar[ProgressStateType]
 
-    def __post_init__(self, initial_state: StateType):
+    def __post_init__(self, initial_state: ProgressStateType):
         self.state = initial_state
 
     def abort(self):
@@ -70,7 +71,7 @@ class StreamProgressFormatter:
             case Progress(
                 state=ProgressState.EXECUTING,
                 iteration=int() as iteration,
-                function=str() as function,
+                functions=[function],
                 arguments=dict() as arguments,
             ):
                 model = create_model(
@@ -80,12 +81,15 @@ class StreamProgressFormatter:
                 instance = model(**arguments)
 
                 msg = f"Executing {pretty_repr(instance)}...\nIteration: {iteration}\n"
-            case Progress(state=ProgressState.GENERATING, function=function):
-                if function:
-                    msg = f"LLM is generating parameters for function: {function}...\n"
+            case Progress(
+                state=ProgressState.GENERATING, functions=list() as functions
+            ):
+                if len(functions) == 1:
+                    msg = (
+                        "LLM is generating parameters for function: "
+                        f"{functions[0]}...\n"
+                    )
                 msg = "LLM is generating response...\n"
-            case ProgressState.IDLE, None:
-                msg = "Waiting for user input...\n"
             case _:
                 msg = f"Progress: {progress.state!r}\n"
 
@@ -93,11 +97,11 @@ class StreamProgressFormatter:
 
 
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
-class StreamProgressHandler:
+class StreamProgressHandler(Generic[ProgressType_contra]):
     formatter: ProgressFormatter = field(default_factory=StreamProgressFormatter)
     stream: TextIO = sys.stdout
 
-    def emit(self, progress: Progress):
+    def emit(self, progress: ProgressType_contra):
         progress_formatted = self.formatter.format(progress)
         self.stream.write(progress_formatted)
 
@@ -107,6 +111,6 @@ class StreamProgressHandler:
 
 
 @dataclass
-class NopProgressHandler:
-    def emit(self, progress: Progress):
+class NopProgressHandler(Generic[ProgressType_contra]):
+    def emit(self, progress: ProgressType_contra):
         pass
