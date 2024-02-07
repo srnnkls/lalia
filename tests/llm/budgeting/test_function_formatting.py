@@ -8,6 +8,7 @@ from lalia.io.serialization.json_schema import (
     ArrayProp,
     BooleanProp,
     JsonSchemaType,
+    NotProp,
     NullProp,
     NumberProp,
     StringProp,
@@ -50,6 +51,11 @@ def null_prop():
 
 
 @pytest.fixture()
+def not_prop():
+    return NotProp(not_=StringProp(), description="A not.")
+
+
+@pytest.fixture()
 def foo_expected():
     return cleandoc(
         """
@@ -69,6 +75,24 @@ b?: string | number, // default: test
 // This is an Enum.
 c?: "option1" | "option2", // default: option1
 }) => any;
+
+} // namespace functions
+"""
+    )
+
+
+@pytest.fixture()
+def baz_expected():
+    return cleandoc(
+        """
+// Tools
+
+// Functions
+
+namespace functions {
+
+// This is a test function. It has no attributes and just returns a string.
+type baz = () => any;
 
 } // namespace functions
 """
@@ -178,6 +202,9 @@ class TestParameterTypeFormatting:
     def test_none_type(self, formatter):
         assert formatter._format_parameter_type(None) == "any"
 
+    def test_not_type(self, formatter):
+        assert formatter._format_parameter_type(NotProp(not_=StringProp())) == "any"
+
     def test_custom_type(self, formatter):
         # some other type supplied
         assert formatter._format_parameter_type("string") == "any"  # type: ignore
@@ -283,15 +310,29 @@ class TestParameterFormatting:
 
 
 class TestFunctionFormatting:
-    def test_internal_function_formatting(self, foo_function, foo_expected, formatter):
+    def test_internal_function_formatting(
+        self, foo_function, foo_expected, baz_function, baz_expected, formatter
+    ):
         foo_formatted = formatter._format_functions_as_typescript_namespace(
             [get_schema(foo_function)]
         )
         assert foo_formatted == foo_expected
 
-    def test_public_format_method(self, foo_function, foo_expected, formatter):
+        baz_formatted = formatter._format_functions_as_typescript_namespace(
+            [get_schema(baz_function)]
+        )
+        assert baz_formatted == baz_expected
+
+    def test_public_format_method(
+        self, foo_function, foo_expected, baz_function, baz_expected, formatter
+    ):
         foo_formatted = formatter.format([get_schema(foo_function)])
         assert foo_formatted == foo_expected
+
+        baz_formatted = formatter.format([get_schema(baz_function)])
+        assert baz_formatted == baz_expected
+
+    # TODO: test format_function_as_typescript_namespace after merge
 
 
 class TestSerialization:

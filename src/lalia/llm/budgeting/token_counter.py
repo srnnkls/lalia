@@ -107,6 +107,8 @@ def estimate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
+    if not messages:
+        return 0
     return sum(_iterate_tokens_in_messages(messages, model)) + Overhead.COMPLETION
 
 
@@ -114,6 +116,8 @@ def estimate_tokens_in_functions(
     functions: Sequence[Callable[..., Any] | dict[str, Any]],
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
+    if not functions:
+        return 0
     function_schemas = []
     for function in functions:
         match function:
@@ -171,7 +175,7 @@ def truncate_messages(
         | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
     ) = lambda _: False,
-) -> list[dict[str, Any]]: ...
+) -> list[dict[str, Any]]: ...  # pragma: no cover
 
 
 @overload
@@ -191,7 +195,7 @@ def truncate_messages(
         | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
     ) = lambda _: False,
-) -> list[Message]: ...
+) -> list[Message]: ...  # pragma: no cover
 
 
 def truncate_messages(

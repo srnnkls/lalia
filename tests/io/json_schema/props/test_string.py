@@ -3,8 +3,8 @@ from lalia.io.serialization.json_schema import JsonSchemaType, StringProp
 
 def test_string_prop_valid_data():
     prop = StringProp(
-        maxLength=10,
-        minLength=1,
+        max_length=10,
+        min_length=1,
         pattern=r"^[a-zA-Z]+$",
         enum=["abc", "def"],
     )

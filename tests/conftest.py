@@ -94,6 +94,15 @@ def foo_function():
 
 
 @pytest.fixture(scope="session")
+def baz_function():
+    def baz() -> str:
+        """This is a test function. It has no attributes and just returns a string."""
+        return "foo bar"
+
+    return baz
+
+
+@pytest.fixture(scope="session")
 def bar_function():
     def bar(
         a: Annotated[int, "This is a integer number."],
