@@ -332,8 +332,6 @@ class TestFunctionFormatting:
         baz_formatted = formatter.format([get_schema(baz_function)])
         assert baz_formatted == baz_expected
 
-    # TODO: test format_function_as_typescript_namespace after merge
-
 
 class TestSerialization:
     def test_function_serialization(self, foo_function, foo_json_expected):

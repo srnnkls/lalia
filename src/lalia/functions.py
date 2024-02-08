@@ -27,6 +27,7 @@ from lalia.io.serialization.functions import (
 )
 
 # need to import Prop so FunctionSchema is correctly defined for pydantic
+# TODO: fix circular import
 from lalia.io.serialization.json_schema import ObjectProp, Prop  # noqa: F401
 
 logger = get_logger(__name__)
@@ -112,13 +113,13 @@ def get_name(callable_: Function[..., Any]) -> str:
 
 def get_callable(callable_: Function[P, T]) -> Function[P, T]:
     if is_callable_instance(callable_):
-        return callable_.__call__
+        return callable_.__call__  # type: ignore
     return callable_
 
 
 def get_schema(callable_: Function[..., Any]) -> FunctionSchema:
     if is_callable_instance(callable_):
-        func = callable_.__call__
+        func = callable_.__call__  # type: ignore
         name = getattr(callable_, "name", type(callable_).__name__)
         doc = func.__doc__ if func.__doc__ else type(callable_).__doc__
 

@@ -56,6 +56,31 @@ class JsonSchemaComposite(StrEnum):
         return to_snake(self.value)
 
 
+class JsonSchemaKeyword(StrEnum):
+    ADDITIONAL_PROPERTIES = "additionalProperties"
+    MAX_PROPERTIES = "maxProperties"
+    MIN_PROPERTIES = "minProperties"
+    PATTERN_PROPERTIES = "patternProperties"
+    PROPERTY_NAMES = "propertyNames"
+    ADDITIONAL_ITEMS = "additionalItems"
+    MAX_ITEMS = "maxItems"
+    MIN_ITEMS = "minItems"
+    UNIQUE_ITEMS = "uniqueItems"
+    MIN_CONTAINS = "minContains"
+    MAX_CONTAINS = "maxContains"
+    PREFIX_ITEMS = "prefixItems"
+    UNEVALUATED_ITEMS = "unevaluatedItems"
+    UNEVALUATED_PROPERTIES = "unevaluatedProperties"
+    MAX_LENGTH = "maxLength"
+    MIN_LENGTH = "minLength"
+    MULTIPLE_OF = "multipleOf"
+    EXCLUSIVE_MAXIMUM = "exclusiveMaximum"
+    EXCLUSIVE_MINIMUM = "exclusiveMinimum"
+
+    def to_snake(self) -> str:
+        return to_snake(self.value)
+
+
 @dataclass
 class AnyProp:
     description: str | None = None
@@ -68,14 +93,18 @@ class StringProp:
     default: str | None = None
     max_length: int | None = Field(
         default=None,
-        serialization_alias="maxLength",
-        validation_alias=AliasChoices("max_length", "maxLength"),
+        serialization_alias=JsonSchemaKeyword.MAX_LENGTH,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MAX_LENGTH.to_snake(), JsonSchemaKeyword.MAX_LENGTH
+        ),
         ge=0,
     )
     min_length: int | None = Field(
         default=None,
-        serialization_alias="minLength",
-        validation_alias=AliasChoices("min_length", "minLength"),
+        serialization_alias=JsonSchemaKeyword.MIN_LENGTH,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MIN_LENGTH.to_snake(), JsonSchemaKeyword.MIN_LENGTH
+        ),
         ge=0,
     )
     pattern: str | re.Pattern | None = None
@@ -95,18 +124,26 @@ class IntegerProp:
     minimum: int | None = None
     exclusive_maximum: int | None = Field(
         default=None,
-        serialization_alias="exclusiveMaximum",
-        validation_alias=AliasChoices("exclusive_maximum", "exclusiveMaximum"),
+        serialization_alias=JsonSchemaKeyword.EXCLUSIVE_MAXIMUM,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.EXCLUSIVE_MAXIMUM.to_snake(),
+            JsonSchemaKeyword.EXCLUSIVE_MAXIMUM,
+        ),
     )
     exclusive_minimum: int | None = Field(
         default=None,
-        serialization_alias="exclusiveMinimum",
-        validation_alias=AliasChoices("exclusive_minimum", "exclusiveMinimum"),
+        serialization_alias=JsonSchemaKeyword.EXCLUSIVE_MINIMUM,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.EXCLUSIVE_MINIMUM.to_snake(),
+            JsonSchemaKeyword.EXCLUSIVE_MINIMUM,
+        ),
     )
     multiple_of: int | None = Field(
         default=None,
-        serialization_alias="multipleOf",
-        validation_alias=AliasChoices("multiple_of", "multipleOf"),
+        serialization_alias=JsonSchemaKeyword.MULTIPLE_OF,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MULTIPLE_OF.to_snake(), JsonSchemaKeyword.MULTIPLE_OF
+        ),
     )
     title: str | None = None
     enum: list[int] | None = None
@@ -123,18 +160,26 @@ class NumberProp:
     minimum: float | None = None
     exclusive_maximum: float | None = Field(
         default=None,
-        serialization_alias="exclusiveMaximum",
-        validation_alias=AliasChoices("exclusive_maximum", "exclusiveMaximum"),
+        serialization_alias=JsonSchemaKeyword.EXCLUSIVE_MAXIMUM,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.EXCLUSIVE_MAXIMUM.to_snake(),
+            JsonSchemaKeyword.EXCLUSIVE_MAXIMUM,
+        ),
     )
     exclusive_minimum: float | None = Field(
         default=None,
-        serialization_alias="exclusiveMinimum",
-        validation_alias=AliasChoices("exclusive_minimum", "exclusiveMinimum"),
+        serialization_alias=JsonSchemaKeyword.EXCLUSIVE_MINIMUM,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.EXCLUSIVE_MINIMUM.to_snake(),
+            JsonSchemaKeyword.EXCLUSIVE_MINIMUM,
+        ),
     )
     multiple_of: float | None = Field(
         default=None,
-        serialization_alias="multipleOf",
-        validation_alias=AliasChoices("multiple_of", "multipleOf"),
+        serialization_alias=JsonSchemaKeyword.MULTIPLE_OF,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MULTIPLE_OF.to_snake(), JsonSchemaKeyword.MULTIPLE_OF
+        ),
     )
     title: str | None = None
     enum: list[int] | None = None
@@ -161,39 +206,56 @@ class ArrayProp:
     title: str | None = None
     prefix_items: list[dict[str, Any]] | None = Field(
         default=None,
-        serialization_alias="prefixItems",
-        validation_alias=AliasChoices("prefix_items", "prefixItems"),
+        serialization_alias=JsonSchemaKeyword.PREFIX_ITEMS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.PREFIX_ITEMS.to_snake(), JsonSchemaKeyword.PREFIX_ITEMS
+        ),
     )
     unevaluated_items: bool | dict[str, Any] | None = Field(
         default=None,
-        serialization_alias="unevaluatedItems",
-        validation_alias=AliasChoices("unevaluated_items", "unevaluatedItems"),
+        serialization_alias=JsonSchemaKeyword.UNEVALUATED_ITEMS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.UNEVALUATED_ITEMS.to_snake(),
+            JsonSchemaKeyword.UNEVALUATED_ITEMS,
+        ),
     )
     contains: Prop | None = None
     min_contains: int | None = Field(
         default=None,
-        serialization_alias="minContains",
-        validation_alias=AliasChoices("min_contains", "minContains"),
+        serialization_alias=JsonSchemaKeyword.MIN_CONTAINS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MIN_CONTAINS.to_snake(), JsonSchemaKeyword.MIN_CONTAINS
+        ),
     )
     max_contains: int | None = Field(
         default=None,
-        serialization_alias="maxContains",
-        validation_alias=AliasChoices("max_contains", "maxContains"),
+        serialization_alias=JsonSchemaKeyword.MAX_CONTAINS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MAX_CONTAINS.to_snake(), JsonSchemaKeyword.MAX_CONTAINS
+        ),
     )
     min_items: int | None = Field(
         default=None,
-        serialization_alias="minItems",
-        validation_alias=AliasChoices("min_items", "minItems"),
+        serialization_alias=JsonSchemaKeyword.MIN_ITEMS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MIN_ITEMS.to_snake(), JsonSchemaKeyword.MIN_ITEMS
+        ),
+        ge=0,
     )
     max_items: int | None = Field(
         default=None,
-        serialization_alias="maxItems",
-        validation_alias=AliasChoices("max_items", "maxItems"),
+        serialization_alias=JsonSchemaKeyword.MAX_ITEMS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MAX_ITEMS.to_snake(), JsonSchemaKeyword.MAX_ITEMS
+        ),
+        ge=0,
     )
     unique_items: bool | None = Field(
         default=None,
-        serialization_alias="uniqueItems",
-        validation_alias=AliasChoices("unique_items", "uniqueItems"),
+        serialization_alias=JsonSchemaKeyword.UNIQUE_ITEMS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.UNIQUE_ITEMS.to_snake(), JsonSchemaKeyword.UNIQUE_ITEMS
+        ),
     )
     type_: Literal[JsonSchemaType.ARRAY] = Field(
         default=JsonSchemaType.ARRAY, alias=PropDiscriminator.TYPE.alias
@@ -218,35 +280,53 @@ class ObjectProp:
     properties: dict[str, Prop] | None = None
     additional_properties: bool | Prop | None = Field(
         default=None,
-        serialization_alias="additionalProperties",
-        validation_alias=AliasChoices("additional_properties", "additionalProperties"),
+        serialization_alias=JsonSchemaKeyword.ADDITIONAL_PROPERTIES,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.ADDITIONAL_PROPERTIES.to_snake(),
+            JsonSchemaKeyword.ADDITIONAL_PROPERTIES,
+        ),
     )
     pattern_properties: dict[str | re.Pattern, Any] | None = Field(
         default=None,
-        serialization_alias="patternProperties",
-        validation_alias=AliasChoices("pattern_properties", "patternProperties"),
+        serialization_alias=JsonSchemaKeyword.PATTERN_PROPERTIES,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.PATTERN_PROPERTIES.to_snake(),
+            JsonSchemaKeyword.PATTERN_PROPERTIES,
+        ),
     )
     unevaluated_properties: bool | None = Field(
         default=None,
-        serialization_alias="unevaluatedProperties",
+        serialization_alias=JsonSchemaKeyword.UNEVALUATED_PROPERTIES,
         validation_alias=AliasChoices(
-            "unevaluated_properties", "unevaluatedProperties"
+            JsonSchemaKeyword.UNEVALUATED_PROPERTIES.to_snake(),
+            JsonSchemaKeyword.UNEVALUATED_PROPERTIES,
         ),
     )
     property_names: dict[str, str] | None = Field(
         default=None,
-        serialization_alias="propertyNames",
-        validation_alias=AliasChoices("property_names", "propertyNames"),
+        serialization_alias=JsonSchemaKeyword.PROPERTY_NAMES,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.PROPERTY_NAMES.to_snake(),
+            JsonSchemaKeyword.PROPERTY_NAMES,
+        ),
     )
     min_properties: int | None = Field(
         default=None,
-        serialization_alias="minProperties",
-        validation_alias=AliasChoices("min_properties", "minProperties"),
+        serialization_alias=JsonSchemaKeyword.MIN_PROPERTIES,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MIN_PROPERTIES.to_snake(),
+            JsonSchemaKeyword.MIN_PROPERTIES,
+        ),
+        ge=0,
     )
     max_properties: int | None = Field(
         default=None,
-        serialization_alias="maxProperties",
-        validation_alias=AliasChoices("max_properties", "maxProperties"),
+        serialization_alias=JsonSchemaKeyword.MAX_PROPERTIES,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.MAX_PROPERTIES.to_snake(),
+            JsonSchemaKeyword.MAX_PROPERTIES,
+        ),
+        ge=0,
     )
     required: list[str] | None = None
     type_: Literal[JsonSchemaType.OBJECT] = Field(

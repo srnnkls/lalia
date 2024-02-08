@@ -60,7 +60,6 @@ def json_schema_type_to_ts(type_: JsonSchemaType) -> str:
     return TypeScriptType[type_.name]
 
 
-# Pyright demanded this to be contravariant
 T_contra = TypeVar("T_contra", contravariant=True)
 
 
@@ -196,17 +195,14 @@ class OpenAIFunctionFormatter:
         # function description needs extra newline
         description_section = f"\n{description}" if description else ""
 
-        # TODO: use pattern matching
-        if function_model.parameters and function_model.parameters.properties:
-            parameters = [
-                self._format_parameter(k, v)
-                for k, v in function_model.parameters.properties.items()
-            ]
-            formatted_parameters = "\n".join(parameters)
-            # TODO: extra section template
-            parameters_section = f"(_: {{\n{formatted_parameters}\n}})"
-        else:
-            parameters_section = "()"
+        match function_model:
+            case FunctionSchema(parameters=ObjectProp(properties=props)) if props:
+                parameters = [self._format_parameter(k, v) for k, v in props.items()]
+                formatted_parameters = "\n".join(parameters)
+                parameters_section = f"(_: {{\n{formatted_parameters}\n}})"
+
+            case _:
+                parameters_section = "()"
 
         return self.function_template.format(
             description=description_section,

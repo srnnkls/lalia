@@ -2,7 +2,7 @@ import pytest
 
 from lalia.chat.messages.tags import Tag
 from lalia.llm.budgeting.budgeter import Budgeter, Encoder
-from lalia.llm.budgeting.token_counter import estimate_tokens
+from lalia.llm.budgeting.token_counter import calculate_tokens
 from lalia.llm.models import ChatModel
 
 
@@ -43,4 +43,4 @@ class TestBudgeterClass:
 
         assert len(truncated_messages) == 2
         assert all(msg.role != "user" for msg in truncated_messages)
-        assert estimate_tokens(truncated_messages) <= 50 - 5
+        assert calculate_tokens(truncated_messages) <= 50 - 5
