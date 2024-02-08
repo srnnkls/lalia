@@ -9,9 +9,9 @@ from lalia.chat.messages.messages import (
 from lalia.chat.session import Session
 from lalia.llm.budgeting.token_counter import (
     count_tokens_in_string,
-    estimate_tokens,
-    estimate_tokens_in_functions,
-    estimate_tokens_in_messages,
+    calculate_tokens,
+    calculate_tokens_in_functions,
+    calculate_tokens_in_messages,
     get_tokens,
 )
 from lalia.llm.openai import ChatModel, OpenAIChat
@@ -72,7 +72,7 @@ class TestUtilityFunctions:
 
 class TestFunctionTokenCounting:
     def test_function_tokens(self, foo_function):
-        assert estimate_tokens_in_functions([foo_function]) == 95
+        assert calculate_tokens_in_functions([foo_function]) == 95
 
     @pytest.mark.openai
     @pytest.mark.exact_tokens
@@ -84,15 +84,15 @@ class TestFunctionTokenCounting:
         # test the general token estimation function
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_tokens(session_with_function.messages, [foo_function])
+        ] == calculate_tokens(session_with_function.messages, [foo_function])
 
         # test seperate message and function token counting
         # to more reliably check for overheads
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_tokens_in_messages(
+        ] == calculate_tokens_in_messages(
             session_with_function.messages
-        ) + estimate_tokens_in_functions(
+        ) + calculate_tokens_in_functions(
             [foo_function]
         )
 
@@ -106,7 +106,7 @@ class TestFunctionTokenCounting:
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
         ] == pytest.approx(
-            estimate_tokens(session_with_function.messages, [foo_function]),
+            calculate_tokens(session_with_function.messages, [foo_function]),
             rel=max_token_deviation,
         )
 
@@ -115,16 +115,16 @@ class TestFunctionTokenCounting:
         assert session_with_function.llm._responses[-1]["usage"][
             "total_tokens"
         ] == pytest.approx(
-            estimate_tokens_in_messages(session_with_function.messages)
-            + estimate_tokens_in_functions([foo_function]),
+            calculate_tokens_in_messages(session_with_function.messages)
+            + calculate_tokens_in_functions([foo_function]),
             rel=max_token_deviation,
         )
 
 
 class TestMessageTokenCounting:
     def test_message_buffers(self, message_buffer, message_buffer_with_function_call):
-        assert estimate_tokens_in_messages(message_buffer) == 21
-        assert estimate_tokens_in_messages(message_buffer_with_function_call) == 37
+        assert calculate_tokens_in_messages(message_buffer) == 21
+        assert calculate_tokens_in_messages(message_buffer_with_function_call) == 37
 
     @pytest.mark.openai
     @pytest.mark.exact_tokens
@@ -132,17 +132,17 @@ class TestMessageTokenCounting:
         session("Is it wise to stroke a boar?")
         assert session.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_tokens_in_messages(session.messages)
+        ] == calculate_tokens_in_messages(session.messages)
 
         session("What do Ants eat?")
         assert session.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_tokens_in_messages(session.messages)
+        ] == calculate_tokens_in_messages(session.messages)
 
         session("What colors can a cow have?")
         assert session.llm._responses[-1]["usage"][
             "total_tokens"
-        ] == estimate_tokens_in_messages(session.messages)
+        ] == calculate_tokens_in_messages(session.messages)
 
     @pytest.mark.openai
     def test_llm_api_response_to_estimation_approximately(
@@ -150,17 +150,17 @@ class TestMessageTokenCounting:
     ):
         session("Is it wise to stroke a boar?")
         assert session.llm._responses[-1]["usage"]["total_tokens"] == pytest.approx(
-            estimate_tokens_in_messages(session.messages), rel=max_token_deviation
+            calculate_tokens_in_messages(session.messages), rel=max_token_deviation
         )
 
         session("What do Ants eat?")
         assert session.llm._responses[-1]["usage"]["total_tokens"] == pytest.approx(
-            estimate_tokens_in_messages(session.messages), rel=max_token_deviation
+            calculate_tokens_in_messages(session.messages), rel=max_token_deviation
         )
 
         session("What colors can a cow have?")
         assert session.llm._responses[-1]["usage"]["total_tokens"] == pytest.approx(
-            estimate_tokens_in_messages(session.messages), rel=max_token_deviation
+            calculate_tokens_in_messages(session.messages), rel=max_token_deviation
         )
 
 
@@ -168,6 +168,8 @@ class TestTokenCounting:
     def test_token_counting(
         self, message_buffer, message_buffer_with_function_call, foo_function
     ):
-        assert estimate_tokens(message_buffer, [foo_function]) == 116
-        assert estimate_tokens(message_buffer_with_function_call) == 37
-        assert estimate_tokens(message_buffer_with_function_call, [foo_function]) == 132
+        assert calculate_tokens(message_buffer, [foo_function]) == 116
+        assert calculate_tokens(message_buffer_with_function_call) == 37
+        assert (
+            calculate_tokens(message_buffer_with_function_call, [foo_function]) == 132
+        )

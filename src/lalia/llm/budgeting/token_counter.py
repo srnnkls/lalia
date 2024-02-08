@@ -35,7 +35,14 @@ class Overhead(IntEnum):
     COMPLETION = 3
 
 
-def _estimate_tokens_in_message(
+def _calculate_tokens_for_function_arguments(
+    arguments: dict[str, Any] | None, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+) -> int:
+    serialized_arguments = json.dumps(arguments, default=str)
+    return get_tokens(serialized_arguments, model=model)
+
+
+def _calculate_tokens_in_message(
     message: Message, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
 ) -> int:
     message_tokens = []
@@ -50,9 +57,8 @@ def _estimate_tokens_in_message(
             function_call=FunctionCall(name=name, arguments=arguments)
         ):
             message_tokens.append(get_tokens(name, model=model))
-            # TODO: centralize argument dumping
             message_tokens.append(
-                get_tokens(json.dumps(arguments, default=str), model=model)
+                _calculate_tokens_for_function_arguments(arguments, model=model)
             )
             message_tokens.append(Overhead.FUNCTION_CALL)
         case FunctionMessage():
@@ -75,11 +81,11 @@ def _iterate_tokens_in_messages(
         match message:
             case dict() as raw_message:
                 parsed_message = adapter.validate_python(raw_message)
-                yield _estimate_tokens_in_message(parsed_message, model)
+                yield _calculate_tokens_in_message(parsed_message, model)
             case (
                 SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
             ):
-                yield _estimate_tokens_in_message(message, model)
+                yield _calculate_tokens_in_message(message, model)
             case _:
                 raise ValueError(
                     "Input must be either a MessageBuffer or a a sequence of "
@@ -103,7 +109,7 @@ def get_tokens(
     return (count_tokens_in_string(string, model) + overhead) if string else 0
 
 
-def estimate_tokens_in_messages(
+def calculate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
@@ -112,7 +118,7 @@ def estimate_tokens_in_messages(
     return sum(_iterate_tokens_in_messages(messages, model)) + Overhead.COMPLETION
 
 
-def estimate_tokens_in_functions(
+def calculate_tokens_in_functions(
     functions: Sequence[Callable[..., Any] | dict[str, Any]],
     model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
 ) -> int:
@@ -134,7 +140,7 @@ def estimate_tokens_in_functions(
     return get_tokens(functions_formatted, model=model)
 
 
-def estimate_tokens(
+def calculate_tokens(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
@@ -142,10 +148,10 @@ def estimate_tokens(
 ) -> int:
     tokens = []
 
-    tokens.append(estimate_tokens_in_messages(messages, model))
+    tokens.append(calculate_tokens_in_messages(messages, model))
 
     if functions:
-        tokens.append(estimate_tokens_in_functions(functions, model))
+        tokens.append(calculate_tokens_in_functions(functions, model))
 
     # only add specific function call tokens, if its 'auto' add nothing
     if function_call != FunctionCallDirective.AUTO:
@@ -258,9 +264,9 @@ def truncate_messages_or_buffer(
         match message:
             case dict() as raw_message:
                 parsed_message = adapter.validate_python(raw_message)
-                return _estimate_tokens_in_message(parsed_message, model)
+                return _calculate_tokens_in_message(parsed_message, model)
             case _:
-                return _estimate_tokens_in_message(message, model)
+                return _calculate_tokens_in_message(message, model)
 
     # calculate maximum tokens allowed for messages
     max_usable_tokens = token_threshold - completion_buffer
@@ -281,10 +287,10 @@ def truncate_messages_or_buffer(
     base_tokens = completion_buffer
     if excluded_indices:
         excluded_messages = [messages[i] for i in excluded_indices]
-        base_tokens += estimate_tokens_in_messages(excluded_messages)
+        base_tokens += calculate_tokens_in_messages(excluded_messages)
 
     if functions:
-        base_tokens += estimate_tokens_in_functions(functions)
+        base_tokens += calculate_tokens_in_functions(functions)
 
     # failsafe: if base tokens exceed the threshold, abort truncation
     if base_tokens > max_usable_tokens:

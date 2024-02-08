@@ -11,7 +11,7 @@ from lalia.chat.messages.buffer import MessageBuffer
 from lalia.chat.messages.messages import Message
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.llm.budgeting.token_counter import (
-    estimate_tokens,
+    calculate_tokens,
     truncate_messages_or_buffer,
 )
 from lalia.llm.models import ChatModel
@@ -76,7 +76,7 @@ class Budgeter:
         messages: MessageBuffer | Sequence[Message | dict[str, Any]],
         functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
     ) -> int:
-        return estimate_tokens(messages, functions)
+        return calculate_tokens(messages, functions)
 
     @overload
     def truncate(

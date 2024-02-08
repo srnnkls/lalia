@@ -2,7 +2,7 @@ import pytest
 
 from lalia.chat.messages.messages import AssistantMessage
 from lalia.chat.messages.tags import Tag
-from lalia.llm.budgeting.token_counter import estimate_tokens, truncate_messages
+from lalia.llm.budgeting.token_counter import calculate_tokens, truncate_messages
 
 
 class TestBudgeterFunction:
@@ -15,7 +15,7 @@ class TestBudgeterFunction:
         assert len(truncated_message_buffer) == 1
         assert truncated_message_buffer[0].content == message_buffer[2].content
         assert type(truncated_message_buffer[0]) == AssistantMessage
-        assert estimate_tokens(truncated_message_buffer) == 25
+        assert calculate_tokens(truncated_message_buffer) == 25
 
     def test_truncation_tokens_exceeded(self, message_buffer, foo_function):
         with pytest.raises(
@@ -49,7 +49,7 @@ class TestBudgeterFunction:
 
         assert len(truncated_message_buffer) == 1
         assert all(msg.role == "system" for msg in truncated_message_buffer)
-        assert estimate_tokens(truncated_message_buffer) <= 30 - 5
+        assert calculate_tokens(truncated_message_buffer) <= 30 - 5
 
     def test_truncation_without_filter(self, message_buffer):
         # no filtering! so no messages are truncated!
@@ -59,7 +59,7 @@ class TestBudgeterFunction:
 
         assert list(message_buffer) == truncated_message_buffer
         assert len(truncated_message_buffer) == len(message_buffer)
-        assert estimate_tokens(truncated_message_buffer) == 43
+        assert calculate_tokens(truncated_message_buffer) == 43
 
     def test_empty_message_buffer(self):
         truncated_message_buffer = truncate_messages(
@@ -90,7 +90,7 @@ class TestBudgeterFunction:
 
     def test_exact_token_threshold_match(self, message_buffer):
         # Assuming you have a way to calculate the exact token count for the message_buffer
-        exact_token_count = estimate_tokens(message_buffer)
+        exact_token_count = calculate_tokens(message_buffer)
 
         truncated_message_buffer = truncate_messages(
             messages=message_buffer,
