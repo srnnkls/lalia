@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
@@ -8,10 +9,10 @@ from typing import Any
 from openai import OpenAI
 from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 from pydantic.dataclasses import dataclass
+from pydantic_core import ArgsKwargs
 
 from lalia.chat.completions import Choice
 from lalia.chat.messages import Message, SystemMessage, UserMessage
-from lalia.chat.messages.messages import FunctionCall
 from lalia.chat.messages.tags import TagPattern
 from lalia.chat.roles import Role
 from lalia.functions import FunctionSchema, get_name, get_schema
@@ -151,8 +152,8 @@ class ChatCompletionResponse:
 
 @dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
 class OpenAIChat:
-    api_key: InitVar[str]
-    model: ChatModel
+    api_key: InitVar[str | None] = None
+    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
     temperature: float = 1.0
     max_retries: int = 5
     parser: Parser | None = Field(None, exclude=True)
@@ -165,24 +166,33 @@ class OpenAIChat:
 
     @model_validator(mode="before")
     @classmethod
-    def _set_up_parser(cls, data: Any) -> Any:
-        if "parser" not in data.kwargs:
+    def _set_up_parser(cls, data: ArgsKwargs) -> ArgsKwargs:
+        kwargs = {} if not data.kwargs else data.kwargs
+        if "parser" not in kwargs:
             parser = LLMParser(
                 llms=[
                     cls(
                         *data.args,
-                        **data.kwargs,
-                        # of course, the parser's LLM has to be parserless to avoid
+                        **kwargs,
+                        # the parser's LLM has to be parserless to avoid
                         # infinite recursion
                         parser=None,
                     )
                 ]
             )
-            data.kwargs["parser"] = parser
+            kwargs["parser"] = parser
+            data = ArgsKwargs(data.args, kwargs)
         return data
 
-    def __post_init__(self, api_key: str):
-        self._api_key = api_key
+    def __post_init__(self, api_key: str | None):
+        if api_key is None:
+            api_key_env = os.getenv("OPENAI_API_KEY")
+            if api_key_env is None:
+                raise ValueError(
+                    "No OpenAI API key provided, `api_key` or env `OPENAI_API_KEY` must"
+                    " be set."
+                )
+        self._api_key = api_key or api_key_env
         self._responses: list[dict[str, Any]] = []
         self._client = OpenAI(api_key=api_key)
 

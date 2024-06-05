@@ -1,10 +1,8 @@
 from typing import (
     Any,
     ClassVar,
-    Generic,
     Hashable,
     Protocol,
-    TypeVar,
     runtime_checkable,
 )
 
@@ -12,30 +10,28 @@ from pydantic import TypeAdapter
 
 from lalia.io.serialization import Serializable
 
-IDType_contra = TypeVar("IDType_contra", bound=Hashable, contravariant=True)
-
 
 @runtime_checkable
-class StorageBackend(Protocol[IDType_contra]):
-    def exists(self, id_: IDType_contra) -> bool: ...
+class StorageBackend(Protocol):
+    def exists(self, id_: Hashable) -> bool: ...
 
-    def load(self, id_: IDType_contra) -> dict[str, Any]: ...
+    def load(self, id_: Hashable) -> dict[str, Any]: ...
 
-    def save(self, obj: Serializable, id_: IDType_contra): ...
+    def save(self, obj: Serializable, id_: Hashable): ...
 
 
-class DictStorageBackend(Generic[IDType_contra]):
+class DictStorageBackend:
     data: ClassVar[dict[str, Any]] = {}
 
-    def exists(self, id_: IDType_contra) -> bool:
+    def exists(self, id_: Hashable) -> bool:
         return id_ in self.data
 
-    def load(self, id_: IDType_contra) -> dict[str, Any]:
+    def load(self, id_: Hashable) -> dict[str, Any]:
         if id_ in self.data:
             return self.data[id_]
         else:
             raise KeyError(f"Could not find '{id_!r}' in {self}")
 
-    def save(self, obj: Serializable, id_: IDType_contra):
+    def save(self, obj: Serializable, id_: Hashable):
         adapter = TypeAdapter(type(obj))
         self.data[id_] = adapter.dump_python(obj)  # type: ignore

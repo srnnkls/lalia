@@ -52,8 +52,8 @@ TagPatterns = Annotated[set[TagPattern], PlainSerializer(_serialize_tags)]
 @dataclass
 class SystemMessage:
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: Tags = field(default_factory=set)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.SYSTEM] = Role.SYSTEM
 
     def _repr_mimebundle_(
@@ -65,8 +65,8 @@ class SystemMessage:
 @dataclass
 class UserMessage:
     content: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: Tags = field(default_factory=set)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.USER] = Role.USER
 
     def _repr_mimebundle_(
@@ -80,8 +80,8 @@ class FunctionMessage:
     content: str
     name: str
     result: FunctionCallResult | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: Tags = field(default_factory=set)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.FUNCTION] = Role.FUNCTION
 
     def _repr_mimebundle_(
@@ -116,8 +116,8 @@ class FunctionCall:
 class AssistantMessage:
     content: str | None = None
     function_call: FunctionCall | None = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     tags: Tags = field(default_factory=set)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.ASSISTANT] = Role.ASSISTANT
 
     @field_validator("function_call", mode="before")
