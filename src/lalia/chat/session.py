@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import field
-from typing import Any, cast, get_args
+from typing import Any
 from uuid import uuid4
 
 from pydantic import UUID4, ConfigDict, Field, field_serializer
@@ -32,9 +32,12 @@ from lalia.functions import (
 from lalia.io.logging import get_logger
 from lalia.io.progress import (
     NopProgressHandler,
-    Progress,
     ProgressManager,
-    ProgressState,
+)
+from lalia.io.progress.session import (
+    ExecutingProgress,
+    GeneratingProgress,
+    SessionProgressState,
 )
 from lalia.io.serialization.functions import (
     CallableRegistry,
@@ -57,14 +60,6 @@ ARGUMENT_PARSING_FAILURE_MESSAGE_TEMPLATE = (
 )
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
-
-
-@dataclass
-class SessionProgress:
-    state: ProgressState
-    iteration: int | None = None
-    functions: list[str] | None = None
-    arguments: dict[str, Any] | None = None
 
 
 @dataclass(
@@ -94,8 +89,8 @@ class Session:
     )
     progress_manager: ProgressManager = field(
         default_factory=lambda: ProgressManager(
-            initial_state=ProgressState.IDLE,
-            handler=NopProgressHandler[SessionProgress](),
+            initial_state=SessionProgressState.IDLE,
+            handler=NopProgressHandler(),
         )
     )
     autocommit: bool = True
@@ -140,9 +135,6 @@ class Session:
         for func in self.functions:
             CallableRegistry.register_callable(func)
 
-        handler_sig = self.progress_manager.handler.__orig_class__  # type: ignore
-        self.progress_type = cast(type[Progress], get_args(handler_sig)[0])
-
         if not self.messages:
             self.messages = MessageBuffer(
                 [
@@ -185,8 +177,7 @@ class Session:
             params["functions"] = self.functions
 
         with messages.expand(context) as messages:
-            progress = self.progress_type(
-                state=ProgressState.GENERATING,
+            progress = GeneratingProgress(
                 functions=[get_name(func) for func in params["functions"]],
             )
             self.progress_manager.emit(progress)
@@ -271,10 +262,9 @@ class Session:
                     arguments=arguments,
                     parsing_error_messages=parsing_error_messages,
                 ):
-                    progress = self.progress_type(
-                        state=ProgressState.EXECUTING,
+                    progress = ExecutingProgress(
                         iteration=i,
-                        functions=[name],
+                        function=name,
                         arguments=arguments,
                     )
                     self.progress_manager.emit(progress)
