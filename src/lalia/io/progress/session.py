@@ -53,7 +53,7 @@ class SessionStreamProgressFormatter:
         match progress:
             case ExecutingProgress(
                 iteration=int() as iteration,
-                functions=[function_name],
+                function=function_name,
                 arguments=dict() as arguments,
             ):
                 model = create_model(

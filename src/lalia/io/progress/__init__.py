@@ -1,11 +1,10 @@
 import sys
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
-from typing import Any, Protocol, TextIO, runtime_checkable
+from typing import Protocol, TextIO, runtime_checkable
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
-from rich import print
 
 MESSAGE_TEMPLATE = "{timestamp:%Y-%m-%d %H:%M:%S} {msg}"
 
@@ -74,7 +73,6 @@ class StreamProgressHandler:
 
     def emit(self, progress: Progress):
         progress_formatted = self.formatter.format(progress)
-        print(progress)
         self.stream.write(progress_formatted)
 
     def flush(self):
