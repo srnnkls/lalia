@@ -32,7 +32,11 @@ def tagged_messages() -> MessageBuffer:
             ),
             UserMessage(
                 content="Arrrrrrr, I am a pirate, too!",
-                tags={Tag("user", "response"), Tag("general", "fourth")},
+                tags={
+                    Tag("user", "response"),
+                    Tag("general", "fourth"),
+                    Tag("error", "argh!"),
+                },
             ),
         ],
         default_fold_tags={TagPattern("system", ".*")},

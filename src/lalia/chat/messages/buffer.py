@@ -91,6 +91,24 @@ class MessageBuffer(Sequence[Message]):
         self.folds.commit()
 
     @contextmanager
+    def collapse(
+        self,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ),
+    ):
+        with self.folds.collapse(tags, self.messages, self.pending):
+            yield self
+
+    @contextmanager
     def expand(
         self,
         tags: (
