@@ -89,8 +89,8 @@ class Folds:
             | set[TagPattern]
             | Callable[[set[Tag]], bool]
             | list[dict[str, Any]]  # serialized tags
-            | dict[str, Any]
-        ),  # serialized callable
+            | dict[str, Any]  # serialized callable
+        ),
     ) -> set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool]:
         match tags:
             case set() as tags:
@@ -166,6 +166,27 @@ class Folds:
     def clear(self, messages: Sequence[Message], pending: Sequence[Message]):
         self._folds.clear()
         self.update(messages, pending)
+
+    @contextmanager
+    def collapse(
+        self,
+        tags: (
+            Tag
+            | TagPattern
+            | set[Tag]
+            | set[TagPattern]
+            | tuple[str | re.Pattern, str | re.Pattern]
+            | dict[str | re.Pattern, str | re.Pattern]
+            | set[tuple[str | re.Pattern, str | re.Pattern]]
+            | set[dict[str | re.Pattern, str | re.Pattern]]
+            | Callable[[set[Tag]], bool]
+        ),
+        messages: Sequence[Message],
+        pending: Sequence[Message],
+    ):
+        self.fold(tags, messages, pending)
+        yield self
+        self.unfold(tags, messages, pending)
 
     def commit(self):
         self.message_states.extend(self.pending_states)
@@ -254,19 +275,19 @@ class Folds:
         pending: Sequence[Message],
     ):
         if not tags:
-            self._folds.clear()
-        else:
-            if not callable(tags):
-                tags = convert_tag_like(tags)
+            tags = TagPattern(".*", ".*")
 
-            unfold = Fold(
-                predicate=derive_tag_predicate(tags),
-                state=FoldState.UNFOLDED,
-            )
-            if ~unfold in self._folds:
-                self._folds.remove(~unfold)
-            else:
-                self._folds.append(unfold)
+        if not callable(tags):
+            tags = convert_tag_like(tags)
+
+        unfold = Fold(
+            predicate=derive_tag_predicate(tags),
+            state=FoldState.UNFOLDED,
+        )
+        if ~unfold in self._folds:
+            self._folds.remove(~unfold)
+        else:
+            self._folds.append(unfold)
 
         self.update(messages, pending)
 
