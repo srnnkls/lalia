@@ -109,7 +109,7 @@ def _truncate_raw_messages(
         *excluded_messages,
         *truncate_messages(
             messages=to_truncate,
-            token_threshold=model.token_limit - excluded_messages_tokens,
+            token_threshold=model.context_window - excluded_messages_tokens,
             completion_buffer=completion_buffer,
             functions=functions,
         ),
