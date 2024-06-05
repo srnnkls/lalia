@@ -114,12 +114,12 @@ def parse_callables(
 
 
 def serialize_callable(callable_: Callable[..., Any]) -> dict[str, Any]:
-    if is_callable_instance(cls_instance := callable_):
-        cls = type(cls_instance)
+    if is_callable_instance(instance := callable_):
+        cls = type(instance)
         name = cls.__qualname__
         module = cls.__module__
         adapter = TypeAdapter(cls)
-        attributes = adapter.dump_python(cls_instance)
+        attributes = adapter.dump_python(instance)
     else:
         name = callable_.__qualname__
         module = callable_.__module__

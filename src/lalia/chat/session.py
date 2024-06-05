@@ -84,9 +84,7 @@ class Session:
     dispatcher: dispatchers.Dispatcher = field(
         default_factory=dispatchers.NopDispatcher
     )
-    storage_backend: StorageBackend[UUID4] = Field(
-        default=DictStorageBackend[UUID4](), exclude=True
-    )
+    storage_backend: StorageBackend = Field(default=DictStorageBackend(), exclude=True)
     progress_manager: ProgressManager = field(
         default_factory=lambda: ProgressManager(
             initial_state=SessionProgressState.IDLE,
@@ -120,7 +118,7 @@ class Session:
     def from_storage(
         cls,
         session_id: UUID4,
-        storage_backend: StorageBackend[UUID4],
+        storage_backend: StorageBackend,
         llm: LLM,
         **kwargs,
     ) -> Session:
