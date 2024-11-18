@@ -172,7 +172,7 @@ class MessageRenderer(JupyterMixin):
         return super()._repr_mimebundle_(include, exclude, **kwargs)  # type: ignore
 
 
-class MessageBufferRender(JupyterMixin):
+class MessageBufferRenderer(JupyterMixin):
     panel_width = 88
 
     def __init__(

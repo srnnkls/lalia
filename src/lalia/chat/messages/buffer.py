@@ -14,7 +14,7 @@ from lalia.chat.messages.folds import DEFAULT_FOLD_TAGS, Folds, derive_tag_predi
 from lalia.chat.messages.messages import Message
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.io.logging import get_logger
-from lalia.io.renderers import MessageBufferRender
+from lalia.io.renderers import MessageBufferRenderer
 
 console = Console()
 
@@ -38,7 +38,7 @@ class MessageBuffer(Sequence[Message]):
         self.folds.update(self.messages, self.pending)
         self._transactional_bounds: list[tuple[int, int]] = []
 
-    def __contains__(self, message: Message) -> bool:
+    def __contains__(self, message: object) -> bool:
         return message in (*self.messages, *self.pending)
 
     def __getitem__(self, index: int) -> Message:
@@ -54,7 +54,7 @@ class MessageBuffer(Sequence[Message]):
     def _repr_mimebundle_(
         self, include: Sequence[str], exclude: Sequence[str], **kwargs
     ) -> dict[str, str]:
-        return MessageBufferRender(
+        return MessageBufferRenderer(
             self.messages,
             self.pending,
             self.folds.message_states,
@@ -84,7 +84,7 @@ class MessageBuffer(Sequence[Message]):
 
     def commit(self):
         self._transactional_bounds.append(
-            (len(self.messages), len(self.messages) + len(self.pending))
+            (len(self.messages), len(self.messages) + len(self.pending) - 1)
         )
         self.messages.extend(self.pending)
         self.pending = []
@@ -178,7 +178,8 @@ class MessageBuffer(Sequence[Message]):
     def revert(self):
         if self._transactional_bounds:
             start, end = self._transactional_bounds.pop()
-            self.pending = self.messages[start:end] + self.pending
+            self.pending = self.messages[start : end + 1] + self.pending
+            self.messages = self.messages[:start]
             self.folds.revert(start, end)
 
     def unfold(

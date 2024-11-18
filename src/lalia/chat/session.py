@@ -460,6 +460,7 @@ class Session:
         self.messages.clear()
         self.messages.add(self.system_message)  # type: ignore
         self.messages.add_messages(self.init_messages)
+        self.messages.commit()
 
         self.dispatcher.reset()
 

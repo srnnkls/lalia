@@ -251,7 +251,7 @@ class Folds:
         self.update(messages, pending)
 
     def revert(self, start: int, end: int):
-        self.pending_states = self.message_states[start:end] + self.pending_states
+        self.pending_states = self.message_states[start : end + 1] + self.pending_states
         self.message_states = self.message_states[:start]
 
     def rollback(self):
