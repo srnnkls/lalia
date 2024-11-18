@@ -143,7 +143,7 @@ class ChatCompletionResponse:
     created: datetime
     model: ChatModel
     choices: list[Choice]
-    usage: dict[str, int]
+    usage: dict[str, Any]
 
     def __post_init__(self):
         if isinstance(self.created, int):
@@ -153,10 +153,10 @@ class ChatCompletionResponse:
 @dataclass(kw_only=True, config=ConfigDict(arbitrary_types_allowed=True))
 class OpenAIChat:
     api_key: InitVar[str | None] = None
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    model: ChatModel = ChatModel.GPT_4O_2024_08_06
     temperature: float = 1.0
     max_retries: int = 5
-    parser: Parser | None = Field(None, exclude=True)
+    parser: Parser | None = Field(default=None, exclude=True)
     failure_messages: list[Message] = field(
         default_factory=lambda: [
             UserMessage(FAILURE_QUERY),

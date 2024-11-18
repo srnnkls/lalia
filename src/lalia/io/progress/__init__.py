@@ -9,8 +9,6 @@ from pydantic.dataclasses import dataclass
 MESSAGE_TEMPLATE = "{timestamp:%Y-%m-%d %H:%M:%S} {msg}"
 
 
-# Probably not needed, as all objects can be considered Representable
-# i.e. doesn;t tell more that Any
 @runtime_checkable
 class Representable(Protocol):
     def __repr__(self) -> str: ...
@@ -18,10 +16,10 @@ class Representable(Protocol):
 
 ProgressState = Representable
 
-
 @runtime_checkable
 class Progress(Protocol):
-    state: ProgressState
+    @property
+    def state(self) -> ProgressState: ...
 
 
 @runtime_checkable
