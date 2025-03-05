@@ -3,11 +3,10 @@ import os
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any
 
 from openai import OpenAI
-from pydantic import ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import ConfigDict, Field, TypeAdapter, create_model, model_validator
 from pydantic.dataclasses import dataclass
 from pydantic_core import ArgsKwargs
 
@@ -23,13 +22,31 @@ from lalia.llm.budgeting.token_counter import (
     calculate_tokens,
     truncate_messages,
 )
-from lalia.llm.models import ChatModel, FunctionCallDirective
+from lalia.llm.llm import (
+    ChatCompletionObject,
+    FunctionCallByName,
+    FunctionCallDirective,
+)
+from lalia.llm.models import ChatModel
 
 FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 
 COMPLETION_BUFFER = 450
 
 logger = get_logger(__name__)
+
+
+def _get_model_context_window(model: ChatModel | str) -> int:
+    match model:
+        case ChatModel():
+            return model.context_window
+        case str():
+            try:
+                return ChatModel[model].context_window
+            except KeyError:
+                return ChatModel.GPT_4O_2024_08_06.context_window
+
+    raise ValueError(f"Unsupported type for model: {type(model)}")
 
 
 def _to_openai_raw_message(message: Message | dict[str, Any]) -> dict[str, Any]:
@@ -72,6 +89,7 @@ def _to_open_ai_raw_function_schema(
             return FunctionSchema(**raw_func_schema).to_dict()
         case Callable():
             return get_schema(func).to_dict()
+
     raise ValueError(f"Cannot convert {func} to OpenAI function schema.")
 
 
@@ -109,7 +127,7 @@ def _truncate_raw_messages(
         *excluded_messages,
         *truncate_messages(
             messages=to_truncate,
-            token_threshold=model.context_window - excluded_messages_tokens,
+            token_threshold=_get_model_context_window(model) - excluded_messages_tokens,
             completion_buffer=completion_buffer,
             functions=functions,
         ),
@@ -130,10 +148,6 @@ class Usage:
     prompt: int
     completion: int
     total: int
-
-
-class ChatCompletionObject(StrEnum):
-    CHAT_COMPLETION = "chat.completion"
 
 
 @dataclass
@@ -186,15 +200,13 @@ class OpenAIChat:
 
     def __post_init__(self, api_key: str | None):
         if api_key is None:
-            api_key_env = os.getenv("OPENAI_API_KEY")
-            if api_key_env is None:
+            if not os.getenv("OPENAI_API_KEY"):
                 raise ValueError(
-                    "No OpenAI API key provided, `api_key` or env `OPENAI_API_KEY` must"
-                    " be set."
+                    "No OpenAI API key provided, either `api_key` or environment "
+                    "variable `OPENAI_API_KEY` must be set."
                 )
-        self._api_key = api_key or api_key_env
-        self._responses: list[dict[str, Any]] = []
         self._client = OpenAI(api_key=api_key)
+        self._responses: list[dict[str, Any]] = []
 
     def _complete_failure(self, messages: Sequence[Message]) -> ChatCompletionResponse:
         messages = list(messages)
@@ -229,13 +241,21 @@ class OpenAIChat:
             name = function_call["name"]
             payload = function_call["arguments"]
             func = next(func for func in functions if get_name(func) == name)
-            args, parsing_error_messages = self.parser.parse_function_call_args(
+            response_model = create_model(
+                f"{name}_response",
+                **{
+                    name: (type_, ...)
+                    for name, type_ in func.__annotations__.items()
+                    if name != "return"
+                },
+            )
+            args, parsing_error_messages = self.parser.parse(
                 payload=payload,
-                function=func,
+                type=response_model,
                 messages=messages,
             )
             function_call["function"] = func
-            function_call["arguments"] = args
+            function_call["arguments"] = dict(args) if args else None
             function_call["context"] = context or set()
             function_call["parsing_error_messages"] = parsing_error_messages
             return response
@@ -249,7 +269,7 @@ class OpenAIChat:
         model: ChatModel | None = None,
         functions: Sequence[Callable[..., Any]] = (),
         function_call: (
-            FunctionCallDirective | dict[str, str]
+            FunctionCallDirective | FunctionCallByName
         ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
@@ -273,7 +293,7 @@ class OpenAIChat:
 
         func_schemas = _to_open_ai_raw_function_schemas(functions)
 
-        raw_response = self.complete_raw(
+        raw_response = self._complete_raw(
             messages=messages,
             model=model,
             functions=func_schemas,
@@ -299,13 +319,13 @@ class OpenAIChat:
 
         return response
 
-    def complete_raw(
+    def _complete_raw(
         self,
         messages: Sequence[Message | dict[str, Any]],
         model: ChatModel | None = None,
         functions: Sequence[dict[str, Any]] = (),
         function_call: (
-            FunctionCallDirective | dict[str, str]
+            FunctionCallDirective | FunctionCallByName
         ) = FunctionCallDirective.AUTO,
         logit_bias: dict[str, float] | None = None,
         max_tokens: int | None = None,
@@ -337,34 +357,39 @@ class OpenAIChat:
             completion_buffer=self.completion_buffer,
         )
 
-        params = {
+        kwargs = {
             "messages": messages_truncated,
             "model": model,
-            "max_tokens": max_tokens,
             "n": n_choices,
             "seed": seed,
-            "stop": stop,
             "temperature": temperature,
-            "top_p": top_p,
             "timeout": timeout,
         }
 
+        if top_p is not None:
+            kwargs["top_p"] = top_p
+
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         if logit_bias is not None:
-            params["logit_bias"] = logit_bias
+            kwargs["logit_bias"] = logit_bias
 
         if functions:
-            params["functions"] = functions
-            params["function_call"] = function_call
+            kwargs["functions"] = functions
+            kwargs["function_call"] = function_call
 
         if presence_penalty is not None:
-            params["presence_penalty"] = presence_penalty
+            kwargs["presence_penalty"] = presence_penalty
+
+        if stop is not None:
+            kwargs["stop"] = stop
 
         if user is not None:
-            params["user"] = user
+            kwargs["user"] = user
 
-        raw_response = self._client.chat.completions.create(**params).model_dump()
+        raw_response = self._client.chat.completions.create(**kwargs).model_dump()
 
-        logger.debug(params)
+        logger.debug(kwargs)
         logger.debug(raw_response)
 
         self._responses.append(raw_response)

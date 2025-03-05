@@ -3,7 +3,7 @@ from lalia.chat.session import Session
 from lalia.llm.openai import ChatModel, OpenAIChat
 
 llm = OpenAIChat(
-    model=ChatModel.GPT_3_5_TURBO_0613,
+    model=ChatModel.GPT_4O,
     api_key=get_openai_token(),
 )
 

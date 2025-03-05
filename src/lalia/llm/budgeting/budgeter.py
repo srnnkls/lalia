@@ -57,7 +57,7 @@ class Encoder:
 class Budgeter:
     token_threshold: int = Field(default=0, gt=0)
     completion_buffer: int = Field(default=0, gt=0)
-    model: ChatModel | str = ChatModel.GPT_3_5_TURBO_0613
+    model: ChatModel | str = ChatModel.GPT_4O
 
     def __post_init__(self):
         self.encoder = Encoder.from_model(self.model)

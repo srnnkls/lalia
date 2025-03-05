@@ -8,6 +8,8 @@ from pydantic.dataclasses import dataclass
 
 MESSAGE_TEMPLATE = "{timestamp:%Y-%m-%d %H:%M:%S} {msg}"
 
+DEFAULT_INITIAL_STATE = "idle"
+
 
 @runtime_checkable
 class Representable(Protocol):
@@ -15,6 +17,7 @@ class Representable(Protocol):
 
 
 ProgressState = Representable
+
 
 @runtime_checkable
 class Progress(Protocol):
@@ -35,7 +38,7 @@ class ProgressHandler(Protocol):
 @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ProgressManager:
     handler: ProgressHandler
-    initial_state: InitVar[ProgressState]
+    initial_state: InitVar[ProgressState] = DEFAULT_INITIAL_STATE
 
     def __post_init__(self, initial_state: ProgressState):
         self.state = initial_state

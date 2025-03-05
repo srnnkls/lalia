@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import builtins
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from inspect import cleandoc
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import TypeAdapter, ValidationError
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from lalia.chat.completions import Choice
 from lalia.chat.messages import FunctionMessage, Message
+from lalia.chat.messages.messages import AssistantMessage, FunctionCall
 from lalia.chat.messages.tags import Tag
-from lalia.chat.roles import Role
-from lalia.functions import dereference_schema, get_callable, get_schema
+from lalia.llm.llm import FunctionCallByName
 
 if TYPE_CHECKING:
     from lalia.llm import LLM
@@ -22,11 +25,12 @@ logger = get_logger(__name__)
 
 yaml = YAML(typ="safe")
 
+
 VALIDATION_ERROR_DIRECTIVE = cleandoc(
     """
     Error: {error}
 
-    Invalid payload: {payload}
+    Original payload: {payload!r}
 
     Are all required parameters provided?
    """
@@ -36,7 +40,7 @@ DESERIALIZATION_ERROR_DIRECTIVE = cleandoc(
     """
     Error: {error}
 
-    Malformed input: {payload}
+    Malformed payload: {payload}
     """
 )
 
@@ -46,36 +50,60 @@ DESERIALIZERS = (
 )
 
 
-def _get_func_call_schema(adapter: TypeAdapter) -> dict[str, Any]:
-    """
-    Wrap a type adapter's json schema in a function call schema.
-    """
-    schema = adapter.json_schema()
-
-    func_schema = {
-        "name": adapter.validator.title,
-        "parameters": {"type": "object", "properties": {}},
-    }
-    func_schema["parameters"] = dereference_schema(schema)
-
-    return func_schema
-
-
 @runtime_checkable
 class Parser(Protocol):
     def parse(
         self,
         payload: str,
-        adapter: TypeAdapter,
+        type: builtins.type[T],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]: ...
+    ) -> tuple[T | None, list[FunctionMessage]]: ...
 
-    def parse_function_call_args(
-        self,
-        payload: str,
-        function: Callable[..., Any],
-        messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]: ...
+
+T = TypeVar("T")
+
+
+@contextmanager
+def disable_parser(llm: LLM) -> Iterator[LLM]:
+    if parser := getattr(llm, "parser", None):
+        llm.parser = None
+        yield llm
+        llm.parser = parser
+
+
+def _create_error_message(name: str, payload: str, error: Exception) -> FunctionMessage:
+    deserializer_errors = tuple(
+        deserializer_error for _, deserializer_error, _ in DESERIALIZERS
+    )
+    common_tags = {
+        Tag("error", "function_call"),
+        Tag("function", name),
+    }
+    if isinstance(validation_error := error, ValidationError):
+        return FunctionMessage(
+            content=VALIDATION_ERROR_DIRECTIVE.format(
+                error=validation_error, payload=payload
+            ),
+            name=name,
+            result=None,
+            tags={
+                Tag("error", "validation"),
+                *common_tags,
+            },
+        )
+    if isinstance(deserialization_error := error, (TypeError, *deserializer_errors)):
+        return FunctionMessage(
+            content=DESERIALIZATION_ERROR_DIRECTIVE.format(
+                error=deserialization_error, payload=payload
+            ),
+            name=name,
+            result=None,
+            tags={
+                Tag("error", "deserialization"),
+                *common_tags,
+            },
+        )
+    raise ValueError("Unknown error type.")
 
 
 class LLMParser:
@@ -89,60 +117,54 @@ class LLMParser:
         self.llms = llms
         self.max_retries = max_retries
 
-    def _complete_invalid_input(
+    def _complete_invalid_payload(
         self,
         payload: str,
-        function_call_schema: dict[str, Any],
+        type: builtins.type[T],
         messages: Sequence[Message],
         llm: LLM,
         exception: Exception,
-    ) -> tuple[str, FunctionMessage]:
-        common_tags = {
-            Tag("error", "function_call"),
-            Tag("function", function_call_schema["name"]),
-        }
-
-        match exception:
-            case ValidationError():
-                error_message = FunctionMessage(
-                    content=VALIDATION_ERROR_DIRECTIVE.format(
-                        error=exception, payload=payload
-                    ),
-                    name=function_call_schema["name"],
-                    result=None,
-                    tags={
-                        Tag("error", "validation"),
-                        *common_tags,
-                    },
-                )
-            case json.JSONDecodeError() | YAMLError():
-                error_message = FunctionMessage(
-                    content=DESERIALIZATION_ERROR_DIRECTIVE.format(
-                        error=exception, payload=payload
-                    ),
-                    name=function_call_schema["name"],
-                    result=None,
-                    tags={
-                        Tag("error", "deserialization"),
-                        *common_tags,
-                    },
-                )
-            case _:
-                raise exception
-
+    ) -> tuple[str, Callable[[dict[str, Any]], dict[str, Any]], FunctionMessage]:
+        name = f"{type.__name__}_response"
+        error_message = _create_error_message(name, payload, exception)
         logger.debug(error_message)
 
-        response = llm.complete_raw(
-            messages=[*messages, error_message],
-            functions=[function_call_schema],
-            function_call={"name": function_call_schema["name"]},
+        def response_wrapper(payload: T):
+            """
+            Supply a valid JSON payload that corrects the failed input.
+
+            Don't add extra quotes around strings. Don't change the input, just
+            correct the input types.
+            """
+            return payload
+
+        response_wrapper.__annotations__ = {"payload": type}
+        response_wrapper.__name__ = name
+
+        def unwrap_response(response: dict[str, Any], /) -> dict[str, Any]:
+            return response["payload"]
+
+        with disable_parser(llm):
+            response = llm.complete(
+                messages=[*messages, error_message],
+                functions=[response_wrapper],
+                function_call=FunctionCallByName(name=name),
+            )
+
+        choice: Choice[str] = next(iter(response.choices))
+
+        arguments, assistant_message = self._handle_choice(choice)
+
+        if arguments is not None:
+            return arguments, unwrap_response, error_message
+
+        return self._complete_invalid_payload(
+            payload=payload,
+            type=type,
+            messages=[*messages, error_message, assistant_message],
+            llm=llm,
+            exception=exception,
         )
-
-        choice = next(iter(response["choices"]))
-
-        arguments, _ = self._handle_choice(choice)
-
-        return arguments, error_message
 
     def _deserialize(self, payload: str) -> dict[str, Any]:
         errors = {}
@@ -150,7 +172,7 @@ class LLMParser:
         for deserializer, error, params in self.deserializers:
             try:
                 deserialized = deserializer(payload, **params)  # type: ignore
-            except error as e:
+            except (TypeError, error) as e:
                 errors[deserializer.__name__] = e
                 continue
             else:
@@ -158,62 +180,56 @@ class LLMParser:
 
         raise errors["loads"]
 
-    def _handle_choice(self, choice: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-        message = choice["message"]
-        if message["role"] == Role.ASSISTANT:
-            arguments = message["function_call"]["arguments"]
-            return arguments, message
-        else:
-            raise ValueError("No function_call for completion.")
+    def _handle_choice(self, choice: Choice[T]) -> tuple[T | None, AssistantMessage]:
+        match choice.message:
+            case AssistantMessage(function_call=FunctionCall(arguments=arguments)):
+                return arguments, choice.message
+        raise ValueError("No function_call for completion.")
 
-    def _parse(
+    def _parse_with_retry(
         self,
         payload: str,
-        adapter: TypeAdapter,
-        function_call_schema: dict[str, Any],
+        type: builtins.type[T],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
+    ) -> tuple[T | None, list[FunctionMessage]]:
+        adapter = TypeAdapter[T](type)
         error_messages: list[FunctionMessage] = []
+        parsed = None
+
+        def unwrap_response(response: dict[str, Any], /) -> dict[str, Any]:
+            return response
+
+        deserializer_errors = tuple(
+            serializer_error for _, serializer_error, _ in self.deserializers
+        )
+
         for llm in self.llms:
             for _ in range(self.max_retries):
                 try:
-                    obj = self._deserialize(payload)
+                    obj = unwrap_response(self._deserialize(payload))
                     logger.debug(obj)
-                    adapter.validate_python(obj)
-                except (
-                    json.JSONDecodeError,
-                    YAMLError,
-                    ValidationError,
-                ) as e:
-                    payload, error_message = self._complete_invalid_input(
-                        payload=payload,
-                        function_call_schema=function_call_schema,
-                        messages=[*messages, *error_messages],
-                        llm=llm,
-                        exception=e,
+                    parsed = adapter.validate_python(obj)
+                except (ValidationError, TypeError, *deserializer_errors) as e:
+                    payload, unwrap_response, error_message = (
+                        self._complete_invalid_payload(
+                            payload=payload,
+                            type=type,
+                            messages=[*messages, *error_messages],
+                            llm=llm,
+                            exception=e,
+                        )
                     )
                     error_messages.append(error_message)
-                    continue
+                continue
 
-                return obj, error_messages
+            return parsed, error_messages
 
         return None, error_messages
 
     def parse(
         self,
         payload: str,
-        adapter: TypeAdapter,
+        type: builtins.type[T],
         messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
-        function_call_schema = _get_func_call_schema(adapter)
-        return self._parse(payload, adapter, function_call_schema, messages)
-
-    def parse_function_call_args(
-        self,
-        payload: str,
-        function: Callable[..., Any],
-        messages: Sequence[Message] = (),
-    ) -> tuple[dict[str, Any] | None, list[FunctionMessage]]:
-        adapter = TypeAdapter(get_callable(function))
-        function_call_schema = get_schema(function).to_dict()
-        return self._parse(payload, adapter, function_call_schema, messages)
+    ) -> tuple[T | None, list[FunctionMessage]]:
+        return self._parse_with_retry(payload, type, messages)

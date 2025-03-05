@@ -151,8 +151,6 @@ class Session:
                 match completion_message, finish_reason:
                     case completion_message, FinishReason.STOP:
                         return completion_message
-                    case failure_message, FinishReason.FAILURE:
-                        return self._complete_failure(failure_message).message
             return self._complete_failure().message
         except (Exception, KeyboardInterrupt) as e:
             self._handle_exception(e)
@@ -337,6 +335,7 @@ class Session:
                 )
                 if finish_reason is FinishReason.DELEGATE:
                     finish_reason = choice.finish_reason
+
                 self.messages.add(function_message)
                 return function_message, finish_reason
             case AssistantMessage(_, None) as assistant_message:

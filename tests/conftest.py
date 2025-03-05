@@ -16,8 +16,6 @@ from lalia.io.renderers import TagColor
 
 OPENAI_API_KEY_REF = "ahssdo26ixj2gloto2b4z34k7u/OpenAI API Key/OPENAI_API_TOKEN"
 
-MAX_TOKEN_DEVIATION = 0.05  # relative tolerance
-
 Tag.register_key_color("user", TagColor.YELLOW)
 Tag.register_key_color("assistant", TagColor.BLUE)
 Tag.register_key_color("system", TagColor.RED)
@@ -113,8 +111,3 @@ def bar_function():
         return f"{a}_{b}"
 
     return bar
-
-
-@pytest.fixture(scope="session")
-def max_token_deviation():
-    return MAX_TOKEN_DEVIATION

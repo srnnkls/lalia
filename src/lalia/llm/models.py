@@ -50,8 +50,3 @@ See e.g.:
 - https://x.com/LouisKnightWebb/status/1790265899255017893
 - https://arxiv.org/pdf/2404.06654
 """
-
-
-class FunctionCallDirective(StrEnum):
-    NONE = "none"
-    AUTO = "auto"

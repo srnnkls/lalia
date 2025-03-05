@@ -1,4 +1,5 @@
 from dataclasses import fields
+from typing import Generic, TypeVar
 
 from pydantic.dataclasses import dataclass
 
@@ -8,15 +9,17 @@ from lalia.chat.messages import (
     FunctionMessage,
 )
 
+T = TypeVar("T")
+
 
 @dataclass
-class Choice:
+class Choice(Generic[T]):
     """
     Wrraps an LLM response message.
     """
 
     index: int
-    message: AssistantMessage
+    message: AssistantMessage[T]
     finish_reason: FinishReason
 
     def __post_init__(self):

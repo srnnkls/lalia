@@ -5,6 +5,13 @@ from lalia.chat.messages.messages import AssistantMessage, SystemMessage, UserMe
 from lalia.chat.messages.tags import Tag
 from lalia.llm.budgeting.budgeter import Encoder
 
+MAX_TOKEN_DEVIATION = 0.1  # relative tolerance
+
+
+@pytest.fixture(scope="session")
+def max_token_deviation():
+    return MAX_TOKEN_DEVIATION
+
 
 @pytest.fixture
 def string_fixture():

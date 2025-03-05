@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import field
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from pydantic import Field, field_validator
 from pydantic.dataclasses import dataclass
@@ -19,6 +19,8 @@ from lalia.functions import Function, FunctionCallResult
 from lalia.io.renderers import MessageRenderer, TagColor
 
 yaml = YAML(typ="safe")
+
+T = TypeVar("T")
 
 
 def _parse_tag(tag: dict[str, str] | tuple[str, str, str] | Tag) -> Tag:
@@ -91,31 +93,18 @@ class FunctionMessage:
 
 
 @dataclass
-class FunctionCall:
+class FunctionCall(Generic[T]):
     name: str
-    arguments: dict[str, Any] | None = None
+    arguments: T | None = None
     function: Function[..., Any] | None = None
     context: TagPatterns = field(default_factory=set)
     parsing_error_messages: list[FunctionMessage] = field(default_factory=list)
 
-    @field_validator("arguments", mode="before")
-    @classmethod
-    def parse_arguments(cls, arguments: str | dict[str, Any]) -> dict[str, Any]:
-        if isinstance(arguments, str):
-            try:
-                return json.loads(arguments, strict=False)
-            except json.JSONDecodeError as e:
-                try:
-                    return yaml.load(arguments)
-                except YAMLError:
-                    raise e from None
-        return arguments
-
 
 @dataclass
-class AssistantMessage:
+class AssistantMessage(Generic[T]):
     content: str | None = None
-    function_call: FunctionCall | None = None
+    function_call: FunctionCall[T] | None = None
     tags: Tags = field(default_factory=set)
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.ASSISTANT] = Role.ASSISTANT

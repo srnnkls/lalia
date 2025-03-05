@@ -38,29 +38,29 @@ class SequentialDispatcher:
             return DispatchCall(
                 callback=session.llm.complete,
                 messages=MessageBuffer(messages),
-                params={"function_call": FunctionCallDirective.NONE},
+                kwargs={"function_call": FunctionCallDirective.NONE},
                 finish_reason=FinishReason.DELEGATE,
             )
 
         if not self._stack and not self._called:
             self._stack.extend(list(session.functions))
 
-        params = {}
+        kwargs = {}
 
         if self._stack:
             finish_reason = FinishReason.FUNCTION_CALL
 
             func = self._stack.popleft()
             self._called.append(func)
-            params["function_call"] = {"name": func.__name__}
+            kwargs["function_call"] = {"name": func.__name__}
         else:
             finish_reason = FinishReason.DELEGATE
-            params["function_call"] = FunctionCallDirective.NONE
+            kwargs["function_call"] = FunctionCallDirective.NONE
 
         return DispatchCall(
             callback=session.llm.complete,
             messages=session.messages,
-            params=params,
+            kwargs=kwargs,
             finish_reason=finish_reason,
         )
 
@@ -99,7 +99,7 @@ def third(third_step: str) -> str:
 def test_sequential_dispatcher():
     bartender = Session(
         llm=OpenAIChat(
-            model=ChatModel.GPT_3_5_TURBO_0613,
+            model=ChatModel.GPT_4O,
             api_key="NOT NEEDED",
         ),
         system_message=(
@@ -115,8 +115,8 @@ def test_sequential_dispatcher():
 
     for func in bartender.functions:
         dispatch_call = bartender.dispatcher.dispatch(bartender)
-        assert dispatch_call.params["function_call"]["name"] == func.__name__
+        assert dispatch_call.kwargs["function_call"]["name"] == func.__name__
 
     bartender.add(UserMessage("I want a Vesper Martini."))
     dispatch_call = bartender.dispatcher.dispatch(bartender)
-    assert dispatch_call.params["function_call"] == FunctionCallDirective.NONE
+    assert dispatch_call.kwargs["function_call"] == FunctionCallDirective.NONE

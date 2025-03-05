@@ -20,7 +20,7 @@ from lalia.llm.openai import ChatModel, OpenAIChat
 @pytest.fixture()
 def llm(openai_api_key):
     return OpenAIChat(
-        model=ChatModel.GPT_3_5_TURBO_0613,
+        model=ChatModel.GPT_4O,
         api_key=openai_api_key,
         temperature=0.0,
     )

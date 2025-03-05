@@ -9,14 +9,14 @@ from lalia.llm.models import ChatModel
 class TestBudgeterInstantiation:
     def test_budgeter_instantiation_default_model(self):
         budgeter = Budgeter(token_threshold=30, completion_buffer=5)
-        assert budgeter.model == ChatModel.GPT_3_5_TURBO_0613
+        assert budgeter.model == ChatModel.GPT_4O
         assert isinstance(budgeter.encoder, Encoder)
 
     def test_budgeter_instantiation_with_model(self):
         budgeter = Budgeter(
-            token_threshold=30, completion_buffer=5, model=ChatModel.GPT_3_5_TURBO_0613
+            token_threshold=30, completion_buffer=5, model=ChatModel.GPT_4O
         )
-        assert budgeter.model == ChatModel.GPT_3_5_TURBO_0613
+        assert budgeter.model == ChatModel.GPT_4O
         assert isinstance(budgeter.encoder, Encoder)
 
     def test_budgeter_invalid_token_threshold(self):

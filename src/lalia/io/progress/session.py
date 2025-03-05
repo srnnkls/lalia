@@ -62,7 +62,7 @@ class SessionStreamProgressFormatter:
                 )  # type: ignore
                 instance = model(**arguments)
 
-                msg = f"Executing {pretty_repr(instance)}...\nIteration: {iteration}"
+                msg = f"Executing {pretty_repr(instance)}...\n  Iteration: {iteration}"
             case GeneratingProgress(functions=[function]):
                 msg = f"LLM is generating parameters for function: {function}..."
             case GeneratingProgress():

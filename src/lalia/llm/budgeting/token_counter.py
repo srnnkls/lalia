@@ -20,7 +20,8 @@ from lalia.chat.messages.messages import (
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.formatting import OpenAIFunctionFormatter
 from lalia.functions import FunctionSchema, get_schema
-from lalia.llm.models import ChatModel, FunctionCallDirective
+from lalia.llm.llm import FunctionCallDirective
+from lalia.llm.models import ChatModel
 
 
 class Overhead(IntEnum):
@@ -36,14 +37,14 @@ class Overhead(IntEnum):
 
 
 def _calculate_tokens_for_function_arguments(
-    arguments: dict[str, Any] | None, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    arguments: dict[str, Any] | None, model: ChatModel = ChatModel.GPT_4O
 ) -> int:
     serialized_arguments = json.dumps(arguments, default=str)
     return get_tokens(serialized_arguments, model=model)
 
 
 def _calculate_tokens_in_message(
-    message: Message, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    message: Message, model: ChatModel = ChatModel.GPT_4O
 ) -> int:
     message_tokens = []
     match message:
@@ -73,7 +74,7 @@ def _calculate_tokens_in_message(
 
 def _iterate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ) -> Iterator[int]:
     adapter = TypeAdapter(Message)
 
@@ -83,7 +84,10 @@ def _iterate_tokens_in_messages(
                 parsed_message = adapter.validate_python(raw_message)
                 yield _calculate_tokens_in_message(parsed_message, model)
             case (
-                SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
+                SystemMessage()
+                | UserMessage()
+                | AssistantMessage()
+                | FunctionMessage()
             ):
                 yield _calculate_tokens_in_message(message, model)
             case _:
@@ -94,7 +98,7 @@ def _iterate_tokens_in_messages(
 
 
 def count_tokens_in_string(
-    string: str, model: ChatModel = ChatModel.GPT_3_5_TURBO_0613
+    string: str, model: ChatModel = ChatModel.GPT_4O
 ):
     encoding = tiktoken.encoding_for_model(model.value)
     token_count = len(encoding.encode(string))
@@ -104,14 +108,14 @@ def count_tokens_in_string(
 def get_tokens(
     string: str | None,
     overhead: int = 0,
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ):
     return (count_tokens_in_string(string, model) + overhead) if string else 0
 
 
 def calculate_tokens_in_messages(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ) -> int:
     if not messages:
         return 0
@@ -120,7 +124,7 @@ def calculate_tokens_in_messages(
 
 def calculate_tokens_in_functions(
     functions: Sequence[Callable[..., Any] | dict[str, Any]],
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ) -> int:
     if not functions:
         return 0
@@ -144,7 +148,7 @@ def calculate_tokens(
     messages: MessageBuffer | Sequence[Message | dict[str, Any]],
     functions: Sequence[Callable[..., Any] | dict[str, Any]] = (),
     function_call: FunctionCallDirective = FunctionCallDirective.AUTO,
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ) -> int:
     tokens = []
 
@@ -255,7 +259,7 @@ def truncate_messages_or_buffer(
         | set[dict[str | re.Pattern, str | re.Pattern]]
         | Callable[[set[Tag]], bool]
     ) = lambda _: False,
-    model: ChatModel = ChatModel.GPT_3_5_TURBO_0613,
+    model: ChatModel = ChatModel.GPT_4O,
 ) -> list[Message] | list[dict[str, Any]]:
     adapter = TypeAdapter(Message)
 
