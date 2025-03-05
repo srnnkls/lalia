@@ -89,12 +89,22 @@ class FunctionSchema:
 
     name: str
     parameters: ObjectProp | None = None
-    description: str = ""
+    description: str | None = None
 
     def to_dict(self) -> dict:
         return TypeAdapter(type(self)).dump_python(
             self, exclude_none=True, by_alias=True
         )
+
+    def dereference_schema(self) -> FunctionSchema:
+        if self.parameters:
+            parameters_dereferenced = dereference_schema(self.to_dict()["parameters"])
+            return FunctionSchema(
+                name=self.name,
+                parameters=ObjectProp(**parameters_dereferenced),
+                description=self.description,
+            )
+        return self
 
 
 def dereference_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -131,24 +141,23 @@ def get_schema(callable_: Function[..., Any]) -> FunctionSchema:
     else:
         raise ValueError(f"Not a callable: {callable_}")
 
-    adapter = TypeAdapter(validate_call(func))
-    func_schema = dereference_schema(adapter.json_schema())
+    adapter = TypeAdapter(func)
+    schema = adapter.json_schema()
 
     type_hints = get_type_hints(func, include_extras=True)
 
-    for prop_name, _ in func_schema["properties"].items():
-        annotation = type_hints.get(prop_name)
+    for prop_name, prop in schema["properties"].items():
+        annotation = type_hints.get(prop_name, prop)
         if annotation and get_origin(annotation) is Annotated:
-            description = next(iter(annotation.__metadata__), "")
-        else:
-            description = ""
+            description = next(iter(annotation.__metadata__), None)
 
-        func_schema["properties"][prop_name]["description"] = description
+            if description:
+                prop["description"] = description
 
     return FunctionSchema(
         name=name,
-        description=inspect.cleandoc(doc) if doc else "",
-        parameters=ObjectProp(**func_schema),
+        description=inspect.cleandoc(doc) if doc else None,
+        parameters=ObjectProp(**schema),
     )
 
 

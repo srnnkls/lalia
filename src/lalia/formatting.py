@@ -141,14 +141,14 @@ class OpenAIFunctionFormatter:
                 if prop.enum:
                     # string enums in TS have quoted values
                     return " | ".join(f'"{v}"' for v in prop.enum)
-                return json_schema_type_to_ts(prop.type_)
+                return json_schema_type_to_ts(prop.type)
             case IntegerProp() | NumberProp() as prop:
                 if prop.enum:
                     # number enums in TS do not have quoted values
                     return " | ".join(f"{v}" for v in prop.enum)
-                return json_schema_type_to_ts(prop.type_)
+                return json_schema_type_to_ts(prop.type)
             case BooleanProp() | NullProp() as prop:
-                return json_schema_type_to_ts(prop.type_)
+                return json_schema_type_to_ts(prop.type)
             case ArrayProp(items=items):
                 return f"{self._format_parameter_type(items)}[]"
             case (
@@ -158,7 +158,7 @@ class OpenAIFunctionFormatter:
             ):
                 return " | ".join(self._format_parameter_type(item) for item in items)
             case ObjectProp() as prop:
-                return json_schema_type_to_ts(prop.type_)
+                return json_schema_type_to_ts(prop.type)
             case NotProp():
                 return "any"
             case _:

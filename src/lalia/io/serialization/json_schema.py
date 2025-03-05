@@ -20,12 +20,12 @@ JSON_SCHEMA_ANY_TAG = "any"
 
 
 class PropDiscriminator(StrEnum):
-    TYPE = "type_"
+    TYPE = "type"
     COMPOSITE = "composite"
 
     @property
     def alias(self) -> str:
-        return to_camel(self.value).rstrip("_")
+        return to_camel(self.value)
 
 
 class JsonSchemaType(StrEnum):
@@ -58,6 +58,7 @@ class JsonSchemaComposite(StrEnum):
 
 class JsonSchemaKeyword(StrEnum):
     ADDITIONAL_PROPERTIES = "additionalProperties"
+    DEFS = "$defs"
     MAX_PROPERTIES = "maxProperties"
     MIN_PROPERTIES = "minProperties"
     PATTERN_PROPERTIES = "patternProperties"
@@ -76,15 +77,32 @@ class JsonSchemaKeyword(StrEnum):
     MULTIPLE_OF = "multipleOf"
     EXCLUSIVE_MAXIMUM = "exclusiveMaximum"
     EXCLUSIVE_MINIMUM = "exclusiveMinimum"
+    REF = "$ref"
 
     def to_snake(self) -> str:
-        return to_snake(self.value)
+        return to_snake(self.value).lstrip("$")
+
+
+@dataclass
+class RefProp:
+    ref: str | None = Field(
+        default=None,
+        serialization_alias=JsonSchemaKeyword.REF,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.REF.to_snake(), JsonSchemaKeyword.REF
+        ),
+        pattern=r"^#\/\$defs\/[a-zA-Z0-9_]+$",
+    )
+    description: str | None = None
+    title: str | None = None
+    default: Any | None = None
 
 
 @dataclass
 class AnyProp:
     description: str | None = None
     title: str | None = None
+    default: Any | None = None
 
 
 @dataclass
@@ -111,7 +129,7 @@ class StringProp:
     format: str | None = None
     title: str | None = None
     enum: list[str] | None = None
-    type_: Literal[JsonSchemaType.STRING] = Field(
+    type: Literal[JsonSchemaType.STRING] = Field(
         default=JsonSchemaType.STRING, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -147,7 +165,7 @@ class IntegerProp:
     )
     title: str | None = None
     enum: list[int] | None = None
-    type_: Literal[JsonSchemaType.INTEGER] = Field(
+    type: Literal[JsonSchemaType.INTEGER] = Field(
         default=JsonSchemaType.INTEGER, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -183,7 +201,7 @@ class NumberProp:
     )
     title: str | None = None
     enum: list[int] | None = None
-    type_: Literal[JsonSchemaType.NUMBER] = Field(
+    type: Literal[JsonSchemaType.NUMBER] = Field(
         default=JsonSchemaType.NUMBER, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -193,7 +211,7 @@ class BooleanProp:
     description: str | None = None
     default: bool | None = None
     title: str | None = None
-    type_: Literal[JsonSchemaType.BOOLEAN] = Field(
+    type: Literal[JsonSchemaType.BOOLEAN] = Field(
         default=JsonSchemaType.BOOLEAN, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -257,7 +275,7 @@ class ArrayProp:
             JsonSchemaKeyword.UNIQUE_ITEMS.to_snake(), JsonSchemaKeyword.UNIQUE_ITEMS
         ),
     )
-    type_: Literal[JsonSchemaType.ARRAY] = Field(
+    type: Literal[JsonSchemaType.ARRAY] = Field(
         default=JsonSchemaType.ARRAY, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -267,13 +285,20 @@ class NullProp:
     description: str | None = None
     default: Any | None = None
     title: str | None = None
-    type_: Literal[JsonSchemaType.NULL] = Field(
+    type: Literal[JsonSchemaType.NULL] = Field(
         default=JsonSchemaType.NULL, alias=PropDiscriminator.TYPE.alias
     )
 
 
 @dataclass
 class ObjectProp:
+    defs: dict[str, Prop] | None = Field(
+        default=None,
+        serialization_alias=JsonSchemaKeyword.DEFS,
+        validation_alias=AliasChoices(
+            JsonSchemaKeyword.DEFS.to_snake(), JsonSchemaKeyword.DEFS
+        ),
+    )
     description: str | None = None
     default: Any | None = None
     title: str | None = None
@@ -302,7 +327,7 @@ class ObjectProp:
             JsonSchemaKeyword.UNEVALUATED_PROPERTIES,
         ),
     )
-    property_names: dict[str, str] | None = Field(
+    property_names: RefProp | StringProp | None = Field(
         default=None,
         serialization_alias=JsonSchemaKeyword.PROPERTY_NAMES,
         validation_alias=AliasChoices(
@@ -329,7 +354,7 @@ class ObjectProp:
         ge=0,
     )
     required: list[str] | None = None
-    type_: Literal[JsonSchemaType.OBJECT] = Field(
+    type: Literal[JsonSchemaType.OBJECT] = Field(
         default=JsonSchemaType.OBJECT, alias=PropDiscriminator.TYPE.alias
     )
 
@@ -399,6 +424,8 @@ def discriminate_composite_prop(payload: Any) -> str | None:
 
 def discriminate_prop(payload: Any) -> str | None:
     if isinstance(payload, dict):
+        if JsonSchemaKeyword.REF in payload:
+            return JsonSchemaKeyword.REF
         if JsonSchemaType.discriminator.alias in payload:
             return JsonSchemaType.discriminator
         elif any(composite_type in payload for composite_type in JsonSchemaComposite):
@@ -436,6 +463,7 @@ CompositeProp = Annotated[
 Prop = Annotated[
     Annotated[TypeProp, Tag(JsonSchemaType.discriminator)]
     | Annotated[AnyProp, Tag(JSON_SCHEMA_ANY_TAG)]
+    | Annotated[RefProp, Tag(JsonSchemaKeyword.REF)]
     | Annotated[CompositeProp, Tag(JsonSchemaComposite.discriminator)],
     Discriminator(discriminate_prop),
 ]

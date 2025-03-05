@@ -132,9 +132,9 @@ def calculate_tokens_in_functions(
     for function in functions:
         match function:
             case Callable():
-                function_schema = get_schema(function)
+                function_schema = get_schema(function).dereference_schema()
             case dict():
-                function_schema = FunctionSchema(**function)
+                function_schema = FunctionSchema(**function).dereference_schema()
             case _:
                 raise ValueError("Input must be either a Callable or a dictionary")
         function_schemas.append(function_schema)
