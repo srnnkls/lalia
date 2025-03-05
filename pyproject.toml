@@ -19,6 +19,9 @@ dynamic = [
   "version"
 ]
 
+[tool.hatch.version]
+source = "vcs"
+
 [tool.hatch.build]
 include = [
   "src/lalia",
@@ -27,34 +30,21 @@ include = [
 [tool.hatch.build.sources]
 "src/lalia" = "lalia"
 
-
-[tool.hatch.envs.default]
-dependencies = [
-  "black>=24.1",
+[dependency-groups]
+dev = [
   "hypothesis",
   "hypothesis-jsonschema",
   "ipykernel",
   "ipython",
-  "pip-tools",
   "pytest",
   "pytest-cov",
   "ruff>=0.2.0",
-  "ruff-lsp"
 ]
-python = "3.11"
-
-[tool.hatch.version]
-source = "vcs"
 
 [tool.hatch.version.raw-options]
 local_scheme = "no-local-version"
 
-[tool.black]
-target-version = ["py311"]
-line-length = 88
-
 [tool.ruff]
-target-version = "py311"
 line-length = 88
 exclude = ["src/lalia/io/models"]
 
@@ -106,9 +96,6 @@ unfixable = [
 [tool.ruff.lint.isort]
 known-first-party = ["lalia"]
 
-[tool.isort]
-profile = "black"
-
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
@@ -116,7 +103,6 @@ ban-relative-imports = "all"
 classmethod-decorators = ['lalia.utils.decorators.classproperty']
 
 [tool.ruff.per-file-ignores]
-
 # Tests can use magic values, assertions, and relative imports
 "tests/**/*" = ["PLR2004", "S101", "TID252"]
 
