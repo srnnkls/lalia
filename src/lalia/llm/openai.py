@@ -35,6 +35,16 @@ COMPLETION_BUFFER = 450
 
 logger = get_logger(__name__)
 
+def _get_model_context_window(model: ChatModel | str) -> int:
+    match model:
+        case ChatModel():
+            return model.context_window
+        case _:
+            try:
+                return ChatModel[model].context_window
+            except KeyError:
+                return ChatModel.GPT_4O_2024_08_06.context_window
+
 
 def _get_model_context_window(model: ChatModel | str) -> int:
     match model:
@@ -133,7 +143,7 @@ def _truncate_raw_messages(
         ),
     ]
 
-    logger.info(
+    logger.debug(
         f"Truncated {len(list(messages))} messages with "
         f"{calculate_tokens(messages, functions, model=model)} tokens to "
         f"{len(messages_truncated)} messages with "

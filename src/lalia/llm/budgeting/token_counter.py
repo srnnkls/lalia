@@ -100,7 +100,7 @@ def _iterate_tokens_in_messages(
 def count_tokens_in_string(
     string: str, model: ChatModel = ChatModel.GPT_4O
 ):
-    encoding = tiktoken.encoding_for_model(model.value)
+    encoding = tiktoken.encoding_for_model(model)
     token_count = len(encoding.encode(string))
     return token_count
 
