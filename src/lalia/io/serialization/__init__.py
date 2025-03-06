@@ -1,14 +1,20 @@
-from collections.abc import Mapping
 from dataclasses import Field
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, final, runtime_checkable
 
 from pydantic import BaseModel
 
 
 @runtime_checkable
-class Dataclass(Protocol):
+class Dataclass(Protocol):  # type: ignore
     @property
-    def __dataclass_fields__(self) -> Mapping[str, Field]: ...
+    def __dataclass_fields__(self) -> dict[str, Field]: ...
+
+
+if TYPE_CHECKING:
+
+    @final
+    class Dataclass(Protocol):
+        __dataclass_fields__: ClassVar[dict[str, Any]]
 
 
 # TODO: Complete? Maybe add missing types
@@ -26,5 +32,5 @@ Serializable = (
     | frozenset
     | bytes
     | Dataclass
-    | type[BaseModel]
+    | BaseModel
 )
