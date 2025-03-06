@@ -23,6 +23,8 @@ from lalia.functions import FunctionSchema, get_schema
 from lalia.llm.llm import FunctionCallDirective
 from lalia.llm.models import ChatModel
 
+DEFAULT_ENCODING = "o200k_base"
+
 
 class Overhead(IntEnum):
     MESSAGE_NAME = -1
@@ -97,10 +99,11 @@ def _iterate_tokens_in_messages(
                 )
 
 
-def count_tokens_in_string(
-    string: str, model: ChatModel = ChatModel.GPT_4O
-):
-    encoding = tiktoken.encoding_for_model(model)
+def count_tokens_in_string(string: str, model: ChatModel = ChatModel.GPT_4O):
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        encoding = tiktoken.get_encoding(DEFAULT_ENCODING)
     token_count = len(encoding.encode(string))
     return token_count
 

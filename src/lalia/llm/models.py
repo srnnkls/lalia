@@ -16,6 +16,8 @@ class ChatModel(StrEnum):
     GPT_4O = "gpt-4o"
     GPT_4O_2024_05_13 = "gpt-4o-2024-05-13"
     GPT_4O_2024_08_06 = "gpt-4o-2024-08-06"
+    GPT_4_5_PREVIEW = "gpt-4.5-preview"
+    GPT_4_5_PREVIEW_2025_02_27 = "gpt-4.5-preview-2025-02-27"
     O1_PREVIEW = "o1-preview"
     O1_MINI = "o1-mini"
     O1 = "o1"
@@ -44,6 +46,8 @@ CONTEXT_WINDOWS = {
     ChatModel.GPT_4O: 32000,
     ChatModel.GPT_4O_2024_05_13: 32000,
     ChatModel.GPT_4O_2024_08_06: 32000,
+    ChatModel.GPT_4_5_PREVIEW: 128000,
+    ChatModel.GPT_4_5_PREVIEW_2025_02_27: 128000,
     ChatModel.O1_PREVIEW: 128000,
     ChatModel.O1_MINI: 128000,
     ChatModel.O1: 200000,

@@ -27,7 +27,7 @@ class IdlingProgress:
 
 @dataclass
 class GeneratingProgress:
-    functions: list[str] = field(default_factory=list)
+    function: str | None = None
     state: Literal[SessionProgressState.GENERATING] = SessionProgressState.GENERATING
 
 
@@ -63,7 +63,7 @@ class SessionStreamProgressFormatter:
                 instance = model(**arguments)
 
                 msg = f"Executing {pretty_repr(instance)}...\n  Iteration: {iteration}"
-            case GeneratingProgress(functions=[function]):
+            case GeneratingProgress(function=str() as function):
                 msg = f"LLM is generating parameters for function: {function}..."
             case GeneratingProgress():
                 msg = "LLM is generating response..."

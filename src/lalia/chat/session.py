@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import field
-from typing import Any
+from typing import Any, Unpack
 from uuid import uuid4
 
-from pydantic import UUID4, ConfigDict, Field, field_serializer
+from pydantic import (
+    UUID4,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    validate_call,
+)
 from pydantic.dataclasses import dataclass
 
 from lalia.chat import dispatchers
@@ -30,10 +37,7 @@ from lalia.functions import (
     get_name,
 )
 from lalia.io.logging import get_logger
-from lalia.io.progress import (
-    NopProgressHandler,
-    ProgressManager,
-)
+from lalia.io.progress import NopProgressHandler, ProgressManager
 from lalia.io.progress.session import (
     ExecutingProgress,
     GeneratingProgress,
@@ -45,7 +49,7 @@ from lalia.io.serialization.functions import (
     serialize_callables,
 )
 from lalia.io.storage import DictStorageBackend, StorageBackend
-from lalia.llm import LLM
+from lalia.llm.llm import LLM, CompleteKwargs
 from lalia.llm.openai import Choice, Usage
 
 logger = get_logger(__name__)
@@ -69,9 +73,7 @@ FAILURE_QUERY = "What went wrong? Do I need to provide more information?"
 class Session:
     llm: LLM
     session_id: UUID4 = field(default_factory=uuid4)
-    system_message: SystemMessage | str = field(
-        default_factory=lambda: SystemMessage(content="")
-    )
+    system_message: SystemMessage | None = None
     init_messages: Sequence[Message] = field(default_factory=list)
     default_fold_tags: set[Tag] | set[TagPattern] | Callable[[set[Tag]], bool] = field(
         default_factory=lambda: DEFAULT_FOLD_TAGS
@@ -97,6 +99,15 @@ class Session:
     max_function_call_attempts: int = 5
     rollback_on_error: bool = True
     verbose: bool = False
+
+    @field_validator("system_message", mode="before")
+    @classmethod
+    def validate_system_message(
+        cls, system_message: SystemMessage | str | None
+    ) -> SystemMessage | None:
+        if isinstance(system_message, str):
+            return SystemMessage(content=system_message)
+        return system_message
 
     @field_serializer("functions")
     def serialize_functions(
@@ -135,53 +146,56 @@ class Session:
 
         if not self.messages:
             self.messages = MessageBuffer(
-                [
-                    self.system_message,
-                    *self.init_messages,
-                ],
                 verbose=self.verbose,
                 default_fold_tags=self.default_fold_tags,
             )
 
-    def __call__(self, user_input: str = "") -> Message:
-        try:
-            self.messages.add(UserMessage(content=user_input))
-            for _ in range(self.max_iterations):
-                completion_message, finish_reason = self.complete()
-                match completion_message, finish_reason:
-                    case completion_message, FinishReason.STOP:
-                        return completion_message
-            return self._complete_failure().message
-        except (Exception, KeyboardInterrupt) as e:
-            self._handle_exception(e)
-            raise AssertionError("Unreachable") from e
+        if self.system_message is not None:
+            self.messages.add(self.system_message)
+
+        if self.init_messages:
+            self.messages.add_messages(self.init_messages)
+
+    @validate_call
+    def __call__(
+        self, user_input: str | UserMessage | None = None
+    ) -> AssistantMessage | FunctionMessage:
+        if isinstance(user_input, str):
+            message = UserMessage(content=user_input)
+        else:
+            message = user_input
+        completion = self.complete_flow(message)
+        return completion.message
 
     def _complete_choices(
-        self, message: Message | None = None, n_choices=1
+        self,
+        message: Message | None = None,
+        context: set[TagPattern] | None = None,
+        **llm_kwargs: Unpack[CompleteKwargs],
     ) -> list[Completion]:
         self.messages.add(message)
 
-        (
-            llm_complete,
-            messages,
-            context,
-            params,
-            dispatcher_finish_reason,
-        ) = self.dispatcher.dispatch(self)
+        call = self.dispatcher.dispatch(self)
 
-        if "functions" not in params:
-            params["functions"] = self.functions
+        kwargs: CompleteKwargs = {**call.kwargs, **llm_kwargs}
 
-        with messages.expand(context) as messages:
+        if "functions" not in kwargs:
+            kwargs["functions"] = self.functions
+
+        if context:
+            context = context | call.context
+        else:
+            context = call.context
+
+        with call.messages.expand(context) as messages:
             progress = GeneratingProgress(
-                functions=[get_name(func) for func in params["functions"]],
+                function=kwargs.get("function_call", {}).get("name")
             )
             self.progress_manager.emit(progress)
-            response = llm_complete(
+            response = call.callback(
                 messages=messages,
                 context=context,
-                n_choices=n_choices,
-                **params,
+                **kwargs,
             )
 
         logger.debug(response)
@@ -191,15 +205,15 @@ class Session:
         for choice in response.choices:
             completion_message, finish_reason = self._handle_choice(choice)
 
-            if dispatcher_finish_reason is not FinishReason.DELEGATE:
-                finish_reason = dispatcher_finish_reason
+            if call.finish_reason is not FinishReason.DELEGATE:
+                finish_reason = call.finish_reason
+
+            completions.append(Completion(completion_message, finish_reason))
 
             if finish_reason is FinishReason.STOP:
                 if self.autocommit:
                     self.messages.commit()
                 self.dispatcher.reset()
-
-            completions.append(Completion(completion_message, finish_reason))
 
         return completions
 
@@ -252,6 +266,8 @@ class Session:
     ) -> tuple[FunctionMessage, FinishReason]:
         for i in range(1, self.max_function_call_attempts + 1):
             match function_call_message.function_call:
+                # TODO: Refactor and appropriately match based on strucutre and
+                # class patterns
                 case FunctionCall(
                     name=name,
                     function=function,
@@ -304,11 +320,6 @@ class Session:
 
                 case None:
                     raise ValueError("No function_call supplied")
-
-                case _ as message:
-                    raise ValueError(
-                        f"Cannot get arguments from message type: {type(message)}"
-                    )
 
         return self._handle_function_call_failure(
             failure_content=(
@@ -429,17 +440,43 @@ class Session:
     def add(self, message: Message):
         self.messages.add(message)
 
-    def complete(self, message: Message | None = None) -> Completion:
-        return next(iter(self.complete_choices(message, n_choices=1)))
+    @validate_call
+    def complete(
+        self,
+        message: Message | None = None,
+        context: set[TagPattern] | None = None,
+        **complete_kwargs: Unpack[CompleteKwargs],
+    ) -> Completion:
+        return next(iter(self.complete_choices(message, context, **complete_kwargs)))
 
+    @validate_call
     def complete_choices(
-        self, message: Message | None = None, n_choices=1
+        self,
+        message: Message | None = None,
+        context: set[TagPattern] | None = None,
+        **complete_kwargs: Unpack[CompleteKwargs],
     ) -> list[Completion]:
         try:
-            return self._complete_choices(message, n_choices)
+            return self._complete_choices(message, context, **complete_kwargs)
         except Exception as e:
             self._handle_exception(e)
-            raise AssertionError("Unreachable") from e
+
+    @validate_call
+    def complete_flow(
+        self,
+        message: Message | None = None,
+        context: set[TagPattern] | None = None,
+    ) -> Completion:
+        self.messages.add(message)
+        try:
+            for _ in range(self.max_iterations):
+                completion = self.complete(context=context)
+                match completion.finish_reason:
+                    case FinishReason.STOP:
+                        return completion
+            return self._complete_failure()
+        except (Exception, KeyboardInterrupt) as e:
+            self._handle_exception(e)
 
     def commit(self):
         self.messages.commit()
@@ -457,7 +494,7 @@ class Session:
 
     def reset(self):
         self.messages.clear()
-        self.messages.add(self.system_message)  # type: ignore
+        self.messages.add(self.system_message)
         self.messages.add_messages(self.init_messages)
         self.messages.commit()
 

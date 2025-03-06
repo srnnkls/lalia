@@ -69,6 +69,8 @@ def disable_parser(llm: LLM) -> Iterator[LLM]:
         llm.parser = None
         yield llm
         llm.parser = parser
+    else:
+        yield llm
 
 
 def _create_error_message(name: str, payload: str, error: Exception) -> FunctionMessage:
