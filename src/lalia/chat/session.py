@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import field
@@ -49,7 +50,7 @@ from lalia.io.serialization.functions import (
     serialize_callables,
 )
 from lalia.io.storage import DictStorageBackend, StorageBackend
-from lalia.llm.llm import LLM, CompleteKwargs
+from lalia.llm.llm import LLM, CallKwargs, CompleteKwargs, P, R_co, Wrapped
 from lalia.llm.openai import Choice, Usage
 
 logger = get_logger(__name__)
@@ -439,6 +440,40 @@ class Session:
 
     def add(self, message: Message):
         self.messages.add(message)
+
+    def call(
+        self,
+        *,
+        prompt: Callable[..., Sequence[Message]],
+        **call_kwargs: Unpack[CallKwargs],
+    ):
+        def merge_prompt(
+            *prompt_args: P.args, **prompt_kwargs: P.kwargs
+        ) -> Sequence[Message]:
+            return [*self.messages.messages, *prompt(*prompt_args, **prompt_kwargs)]
+
+        def decorator(func: Wrapped[P, R_co]) -> Wrapped[P, R_co]:
+            @functools.wraps(func)
+            def wrapper(*prompt_args: P.args, **prompt_kwargs: P.kwargs) -> R_co:
+                function_call = self.llm.call(prompt=merge_prompt, **call_kwargs)(func)
+
+                response = function_call(*prompt_args, **prompt_kwargs)
+                self.messages.add_messages(
+                    [
+                        *prompt(*prompt_args, **prompt_kwargs),
+                        AssistantMessage(content=str(response)),
+                    ]
+                )
+
+                if self.autocommit:
+                    self.messages.commit()
+                self.dispatcher.reset()
+
+                return response
+
+            return wrapper
+
+        return decorator
 
     @validate_call
     def complete(

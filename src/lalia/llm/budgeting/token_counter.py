@@ -19,7 +19,7 @@ from lalia.chat.messages.messages import (
 )
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.formatting import OpenAIFunctionFormatter
-from lalia.functions import FunctionSchema, get_schema
+from lalia.functions import dereference_schema, get_schema
 from lalia.llm.llm import FunctionCallDirective
 from lalia.llm.models import ChatModel
 
@@ -86,10 +86,7 @@ def _iterate_tokens_in_messages(
                 parsed_message = adapter.validate_python(raw_message)
                 yield _calculate_tokens_in_message(parsed_message, model)
             case (
-                SystemMessage()
-                | UserMessage()
-                | AssistantMessage()
-                | FunctionMessage()
+                SystemMessage() | UserMessage() | AssistantMessage() | FunctionMessage()
             ):
                 yield _calculate_tokens_in_message(message, model)
             case _:
@@ -136,8 +133,10 @@ def calculate_tokens_in_functions(
         match function:
             case Callable():
                 function_schema = get_schema(function).dereference_schema()
-            case dict():
-                function_schema = FunctionSchema(**function).dereference_schema()
+            case dict() as function_schema:
+                function_schema["parameters"] = dereference_schema(
+                    function_schema["parameters"]
+                )
             case _:
                 raise ValueError("Input must be either a Callable or a dictionary")
         function_schemas.append(function_schema)

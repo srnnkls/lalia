@@ -1,12 +1,13 @@
 from inspect import cleandoc
 
+import hypothesis
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from lalia.chat.completions import Choice
 from lalia.chat.messages.messages import AssistantMessage, UserMessage
-from lalia.llm.openai import ChatCompletionResponse, FunctionCallDirective
+from lalia.llm.openai import ChatCompletionResponse, FunctionCallDirective, OpenAIChat
 
 
 @pytest.fixture()
@@ -39,8 +40,7 @@ def test_llm_complete_function(fake_llm, functions):
     assert "to_drive_crazy" in message.function_call.arguments
 
 
-def test_complete(fake_llm_type, functions):
-    fake_llm_strategy = st.from_type(fake_llm_type)
+def test_complete(fake_openai_client_type, functions):
     content_strategy = st.text(min_size=10)
     messages_strategy = st.lists(
         st.builds(UserMessage, content=content_strategy), min_size=1
@@ -51,35 +51,39 @@ def test_complete(fake_llm_type, functions):
     temperature_strategy = st.none()
     model_strategy = st.none()
     func_call_args_strategy = st.data()  # dynamically drawn based on functions
+    fake_openai_client_strategy = st.builds(
+        fake_openai_client_type, hypothesis_function_call_args=func_call_args_strategy
+    )
+    fake_llm_strategy = st.builds(OpenAIChat)
 
     @given(
         fake_llm=fake_llm_strategy,
+        fake_openai_client=fake_openai_client_strategy,
         messages=messages_strategy,
         functions=functions_strategy,
         function_call=function_call_strategy,
         n_choices=n_choices_strategy,
         temperature=temperature_strategy,
         model=model_strategy,
-        func_call_args=func_call_args_strategy,
     )
     def test_complete_with_strategies(
         fake_llm,
+        fake_openai_client,
         messages,
         functions,
         function_call,
         n_choices,
         temperature,
         model,
-        func_call_args,
     ):
+        fake_llm._client = fake_openai_client
         response = fake_llm.complete(
-            messages,
-            functions,
-            function_call,
-            n_choices,
-            temperature,
-            model,
-            _hypothesis_func_call_args=func_call_args,
+            messages=messages,
+            functions=functions,
+            function_call=function_call,
+            n_choices=n_choices,
+            temperature=temperature,
+            model=model,
         )
 
         assert response is not None

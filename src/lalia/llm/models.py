@@ -53,6 +53,7 @@ CONTEXT_WINDOWS = {
     ChatModel.O1: 200000,
     ChatModel.O1_PRO: 200000,
     ChatModel.O3_MINI: 200000,
+    ChatModel.O3_MINI_2025_01_31: 200000,
 }
 """
 The maximum number of tokens that can be used in a single request for each model.

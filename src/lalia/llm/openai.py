@@ -1,19 +1,24 @@
-import json
+import functools
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ParamSpec, TypeVar, Unpack
 
 from openai import OpenAI
-from pydantic import ConfigDict, Field, TypeAdapter, create_model, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    create_model,
+    model_validator,
+)
 from pydantic.dataclasses import dataclass
 from pydantic_core import ArgsKwargs
 
 from lalia.chat.completions import Choice
-from lalia.chat.messages import Message, SystemMessage, UserMessage
+from lalia.chat.messages import FunctionCall, Message, SystemMessage, UserMessage
 from lalia.chat.messages.tags import TagPattern
-from lalia.chat.roles import Role
 from lalia.functions import FunctionSchema, get_name, get_schema
 from lalia.io.logging import get_logger
 from lalia.io.models.openai import ChatCompletionRequestMessage
@@ -23,9 +28,11 @@ from lalia.llm.budgeting.token_counter import (
     truncate_messages,
 )
 from lalia.llm.llm import (
+    CallKwargs,
     ChatCompletionObject,
     FunctionCallByName,
     FunctionCallDirective,
+    Wrapped,
 )
 from lalia.llm.models import ChatModel
 
@@ -35,15 +42,8 @@ COMPLETION_BUFFER = 450
 
 logger = get_logger(__name__)
 
-def _get_model_context_window(model: ChatModel | str) -> int:
-    match model:
-        case ChatModel():
-            return model.context_window
-        case _:
-            try:
-                return ChatModel[model].context_window
-            except KeyError:
-                return ChatModel.GPT_4O_2024_08_06.context_window
+R_co = TypeVar("R_co", covariant=True)
+P = ParamSpec("P")
 
 
 def _get_model_context_window(model: ChatModel | str) -> int:
@@ -69,17 +69,6 @@ def _to_openai_raw_message(message: Message | dict[str, Any]) -> dict[str, Any]:
         for field, value in adapter.dump_python(message, exclude_none=True).items()
         if field in ChatCompletionRequestMessage.model_fields
     }
-    match raw_message:
-        case {
-            "role": Role.ASSISTANT,
-            "function_call": {"name": name} as f_call,
-        }:
-            # TODO: Centralize argument dumping
-            raw_message["function_call"] = {
-                "name": name,
-                "arguments": json.dumps(f_call.get("arguments"), indent=2, default=str),
-            }
-
     return raw_message
 
 
@@ -271,6 +260,57 @@ class OpenAIChat:
             return response
         else:
             return response
+
+    def call(
+        self,
+        *,
+        prompt: Callable[..., Sequence[Message]],
+        **call_kwargs: Unpack[CallKwargs],
+    ):
+        def decorator(func: Wrapped[P, R_co]) -> Wrapped[P, R_co]:
+            response_type = func.__annotations__.get("return", str)
+
+            def response_wrapper(response: R_co) -> R_co:
+                """
+                Respond as per the user's request.
+                """
+                ...
+
+            # TODO: This hack is probably needed at other places too...
+            # -> Justifies an own API -> Make it itself a decorator
+            response_wrapper.__annotations__["response"] = response_type
+            response_wrapper.__annotations__["return"] = response_type
+            response_wrapper.__name__ = response_type.__name__
+
+            @functools.wraps(func)
+            def wrapper(*prompt_args: P.args, **prompt_kwargs: P.kwargs) -> R_co:
+                messages = prompt(*prompt_args, **prompt_kwargs)
+                function_call = (
+                    self.complete(
+                        messages=messages,
+                        functions=[response_wrapper],
+                        function_call=FunctionCallByName(
+                            name=get_name(response_wrapper)
+                        ),
+                        **call_kwargs,
+                    )
+                    .choices[0]
+                    .message.function_call
+                )
+                # TODO: properly handle edge cases
+                match function_call:
+                    case FunctionCall(
+                        arguments={"response": response},
+                    ):
+                        return response
+                    case _:
+                        return (
+                            self._complete_failure(messages).choices[0].message.content
+                        )
+
+            return wrapper
+
+        return decorator
 
     def complete(
         self,

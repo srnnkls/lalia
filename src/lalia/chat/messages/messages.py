@@ -11,7 +11,6 @@ from pydantic.dataclasses import dataclass
 from pydantic.functional_serializers import PlainSerializer
 from pydantic.functional_validators import BeforeValidator
 from ruamel.yaml import YAML
-from ruamel.yaml.error import YAMLError
 
 from lalia.chat.messages.tags import Tag, TagPattern
 from lalia.chat.roles import Role
@@ -21,6 +20,13 @@ from lalia.io.renderers import MessageRenderer, TagColor
 yaml = YAML(typ="safe")
 
 T = TypeVar("T")
+
+
+def _serialize_arguments(arguments: dict[str, Any]) -> str:
+    return json.dumps(arguments)
+
+
+Arguments = Annotated[T, PlainSerializer(_serialize_arguments)]
 
 
 def _parse_tag(tag: dict[str, str] | tuple[str, str, str] | Tag) -> Tag:
@@ -95,7 +101,7 @@ class FunctionMessage:
 @dataclass
 class FunctionCall(Generic[T]):
     name: str
-    arguments: T | None = None
+    arguments: Arguments | None = None
     function: Function[..., Any] | None = None
     context: TagPatterns = field(default_factory=set)
     parsing_error_messages: list[FunctionMessage] = field(default_factory=list)
@@ -104,7 +110,7 @@ class FunctionCall(Generic[T]):
 @dataclass
 class AssistantMessage(Generic[T]):
     content: str | None = None
-    function_call: FunctionCall[T] | None = None
+    function_call: FunctionCall[Arguments] | None = None
     tags: Tags = field(default_factory=set)
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     role: Literal[Role.ASSISTANT] = Role.ASSISTANT

@@ -13,7 +13,7 @@ from typing import (
 )
 
 from jsonref import replace_refs
-from pydantic import TypeAdapter, ValidationError, validate_call
+from pydantic import Field, TypeAdapter, ValidationError, validate_call
 from pydantic.dataclasses import dataclass
 from pydantic.functional_serializers import PlainSerializer
 from pydantic.functional_validators import BeforeValidator
@@ -88,6 +88,7 @@ class FunctionSchema:
     """Describes a function schema, including its parameters."""
 
     name: str
+    function: Callable[..., Any] | None = Field(default=None, exclude=True)
     parameters: ObjectProp | None = None
     description: str | None = None
 
@@ -101,6 +102,7 @@ class FunctionSchema:
             parameters_dereferenced = dereference_schema(self.to_dict()["parameters"])
             return FunctionSchema(
                 name=self.name,
+                function=self.function,
                 parameters=ObjectProp(**parameters_dereferenced),
                 description=self.description,
             )
@@ -156,6 +158,7 @@ def get_schema(callable_: Function[..., Any]) -> FunctionSchema:
 
     return FunctionSchema(
         name=name,
+        function=func,
         description=inspect.cleandoc(doc) if doc else None,
         parameters=ObjectProp(**schema),
     )
